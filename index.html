@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskPilot - Plan Your Day</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      header {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 20px 30px;
+        border-radius: 16px;
+        margin-bottom: 30px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .logo h1 {
+        font-size: 28px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .logo-icon {
+        font-size: 32px;
+      }
+
+      nav {
+        display: flex;
+        gap: 20px;
+      }
+
+      nav a {
+        text-decoration: none;
+        color: #4a5568;
+        font-weight: 500;
+        padding: 8px 16px;
+        border-radius: 8px;
+        transition: all 0.3s;
+      }
+
+      nav a:hover,
+      nav a.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .main-content {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+      }
+
+      .card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 30px;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+
+      .card h2 {
+        font-size: 24px;
+        margin-bottom: 20px;
+        color: #2d3748;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .input-section {
+        grid-column: 1 / -1;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 200px;
+        padding: 15px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        font-size: 16px;
+        font-family: inherit;
+        resize: vertical;
+        transition: border-color 0.3s;
+      }
+
+      textarea:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+      }
+
+      button {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        flex: 1;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-secondary {
+        background: #e2e8f0;
+        color: #4a5568;
+      }
+
+      .btn-secondary:hover {
+        background: #cbd5e0;
+      }
+
+      .suggestions-list {
+        list-style: none;
+      }
+
+      .suggestion-item {
+        padding: 15px;
+        background: #f7fafc;
+        border-left: 4px solid #667eea;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .suggestion-icon {
+        font-size: 20px;
+        flex-shrink: 0;
+      }
+
+      .schedule-list {
+        list-style: none;
+      }
+
+      .schedule-item {
+        padding: 15px;
+        background: #f7fafc;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .schedule-time {
+        font-weight: 600;
+        color: #667eea;
+        min-width: 120px;
+      }
+
+      .schedule-task {
+        flex: 1;
+        margin: 0 15px;
+      }
+
+      .schedule-duration {
+        color: #718096;
+        font-size: 14px;
+      }
+
+      .priority-badge {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .priority-high {
+        background: #fed7d7;
+        color: #c53030;
+      }
+
+      .priority-medium {
+        background: #feebc8;
+        color: #c05621;
+      }
+
+      .priority-low {
+        background: #c6f6d5;
+        color: #2f855a;
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        padding: 20px;
+        color: #667eea;
+      }
+
+      .loading.active {
+        display: block;
+      }
+
+      .spinner {
+        border: 3px solid #e2e8f0;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #718096;
+      }
+
+      .empty-state-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+      }
+
+      @media (max-width: 768px) {
+        .main-content {
+          grid-template-columns: 1fr;
+        }
+
+        nav {
+          display: none;
+        }
+
+        header {
+          flex-direction: column;
+          gap: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div class="logo">
+          <span class="logo-icon">🏆</span>
+          <h1>TaskPilot</h1>
+        </div>
+        <nav>
+          <a href="index.html" class="active">Plan</a>
+          <a href="today.html">Today</a>
+          <a href="tasks.html">Tasks</a>
+          <a href="focus.html">Focus</a>
+          <a href="settings.html">Settings</a>
+        </nav>
+      </header>
+
+      <div class="main-content">
+        <div class="card input-section">
+          <h2>📝 What's on your mind today?</h2>
+          <textarea
+            id="planInput"
+            placeholder="Write your day in plain language...
+
+Example:
+Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with friends at 8"
+          ></textarea>
+          <div class="button-group">
+            <button class="btn-primary" onclick="generatePlan()">
+              <span>✨</span>
+              <span>Generate AI Plan</span>
+            </button>
+            <button class="btn-secondary" onclick="clearInput()">
+              <span>🗑️</span>
+              <span>Clear</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>💡 AI Suggestions</h2>
+          <div class="loading" id="suggestionsLoading">
+            <div class="spinner"></div>
+            <p>Meta Llama is thinking...</p>
+          </div>
+          <div id="suggestionsContent">
+            <div class="empty-state">
+              <div class="empty-state-icon">🤖</div>
+              <p>AI coaching suggestions will appear here</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>📅 Structured Schedule</h2>
+          <div class="loading" id="scheduleLoading">
+            <div class="spinner"></div>
+            <p>Cerebras is building your schedule...</p>
+          </div>
+          <div id="scheduleContent">
+            <div class="empty-state">
+              <div class="empty-state-icon">📋</div>
+              <p>Your structured schedule will appear here</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let currentSchedule = [];
+
+      function clearInput() {
+        document.getElementById("planInput").value = "";
+        document.getElementById("suggestionsContent").innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🤖</div>
+                    <p>AI coaching suggestions will appear here</p>
+                </div>
+            `;
+        document.getElementById("scheduleContent").innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <p>Your structured schedule will appear here</p>
+                </div>
+            `;
+      }
+
+      async function generatePlan() {
+        const input = document.getElementById("planInput").value.trim();
+
+        if (!input) {
+          alert("Please write your daily plan first!");
+          return;
+        }
+
+        // Show loading states
+        document.getElementById("suggestionsLoading").classList.add("active");
+        document.getElementById("scheduleLoading").classList.add("active");
+        document.getElementById("suggestionsContent").innerHTML = "";
+        document.getElementById("scheduleContent").innerHTML = "";
+
+        // Simulate API calls (replace with actual API calls)
+        setTimeout(() => generateSuggestions(input), 1000);
+        setTimeout(() => generateSchedule(input), 1500);
+      }
+
+      function generateSuggestions(input) {
+        // Simulate Meta Llama suggestions
+        const suggestions = [
+          {
+            icon: "⏰",
+            text: "Consider adding buffer time between meetings to avoid context switching fatigue.",
+          },
+          {
+            icon: "🎯",
+            text: "Your deep work block is well-placed in the morning when focus is typically highest.",
+          },
+          {
+            icon: "🏃",
+            text: "Great job prioritizing exercise! Morning workouts boost energy for the day.",
+          },
+          {
+            icon: "🍎",
+            text: "Remember to schedule meal breaks - your brain needs fuel to perform optimally.",
+          },
+        ];
+
+        document
+          .getElementById("suggestionsLoading")
+          .classList.remove("active");
+        document.getElementById("suggestionsContent").innerHTML = `
+                <ul class="suggestions-list">
+                    ${suggestions
+                      .map(
+                        (s) => `
+                        <li class="suggestion-item">
+                            <span class="suggestion-icon">${s.icon}</span>
+                            <span>${s.text}</span>
+                        </li>
+                    `
+                      )
+                      .join("")}
+                </ul>
+            `;
+      }
+
+      function generateSchedule(input) {
+        // Simulate Cerebras structured schedule
+        currentSchedule = [
+          {
+            time: "07:00 AM",
+            task: "Gym Workout",
+            duration: "60 min",
+            priority: "high",
+          },
+          {
+            time: "08:15 AM",
+            task: "Breakfast & Prep",
+            duration: "45 min",
+            priority: "medium",
+          },
+          {
+            time: "09:00 AM",
+            task: "Deep Work Session",
+            duration: "120 min",
+            priority: "high",
+          },
+          {
+            time: "11:15 AM",
+            task: "Team Standup",
+            duration: "15 min",
+            priority: "high",
+          },
+          {
+            time: "11:30 AM",
+            task: "Email & Admin",
+            duration: "30 min",
+            priority: "low",
+          },
+          {
+            time: "12:00 PM",
+            task: "Lunch Break",
+            duration: "60 min",
+            priority: "medium",
+          },
+          {
+            time: "01:00 PM",
+            task: "Project Work",
+            duration: "120 min",
+            priority: "high",
+          },
+          {
+            time: "03:00 PM",
+            task: "Break & Walk",
+            duration: "15 min",
+            priority: "low",
+          },
+          {
+            time: "03:15 PM",
+            task: "Meetings & Calls",
+            duration: "105 min",
+            priority: "medium",
+          },
+          {
+            time: "05:00 PM",
+            task: "Wrap-up & Planning",
+            duration: "30 min",
+            priority: "low",
+          },
+          {
+            time: "06:00 PM",
+            task: "Groceries",
+            duration: "45 min",
+            priority: "medium",
+          },
+          {
+            time: "08:00 PM",
+            task: "Dinner with Friends",
+            duration: "120 min",
+            priority: "high",
+          },
+        ];
+
+        document.getElementById("scheduleLoading").classList.remove("active");
+        document.getElementById("scheduleContent").innerHTML = `
+                <ul class="schedule-list">
+                    ${currentSchedule
+                      .map(
+                        (item) => `
+                        <li class="schedule-item">
+                            <div class="schedule-time">${item.time}</div>
+                            <div class="schedule-task">${item.task}</div>
+                            <div class="schedule-duration">${item.duration}</div>
+                            <span class="priority-badge priority-${item.priority}">${item.priority}</span>
+                        </li>
+                    `
+                      )
+                      .join("")}
+                </ul>
+                <div class="button-group" style="margin-top: 20px;">
+                    <button class="btn-primary" onclick="saveSchedule()">
+                        <span>💾</span>
+                        <span>Save to Today</span>
+                    </button>
+                    <button class="btn-secondary" onclick="exportCalendar()">
+                        <span>📥</span>
+                        <span>Export .ics</span>
+                    </button>
+                </div>
+            `;
+      }
+
+      function saveSchedule() {
+        localStorage.setItem("todaySchedule", JSON.stringify(currentSchedule));
+        alert("✅ Schedule saved to Today dashboard!");
+        setTimeout(() => (window.location.href = "today.html"), 1000);
+      }
+
+      function exportCalendar() {
+        // Simple ICS export
+        alert(
+          "📅 Calendar export would be handled by Docker MCP Gateway in production"
+        );
+        // In production, this would call the MCP tool to generate .ics file
+      }
+    </script>
+  </body>
+</html>

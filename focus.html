@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskPilot - Focus Mode</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      body.focus-active {
+        background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+      }
+
+      .container {
+        max-width: 800px;
+        width: 100%;
+      }
+
+      .focus-card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 60px 40px;
+        border-radius: 24px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        text-align: center;
+      }
+
+      .back-btn {
+        position: absolute;
+        top: 30px;
+        left: 30px;
+        padding: 12px 24px;
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 12px;
+        color: white;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.3s;
+        backdrop-filter: blur(10px);
+      }
+
+      .back-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-2px);
+      }
+
+      .task-name {
+        font-size: 32px;
+        font-weight: 700;
+        color: #2d3748;
+        margin-bottom: 40px;
+      }
+
+      .timer-display {
+        font-size: 96px;
+        font-weight: 700;
+        color: #667eea;
+        margin-bottom: 40px;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.05em;
+      }
+
+      .timer-display.active {
+        color: #48bb78;
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      .timer-display.break {
+        color: #ed8936;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.8;
+        }
+      }
+
+      .progress-ring {
+        margin: 0 auto 40px;
+        position: relative;
+        width: 300px;
+        height: 300px;
+      }
+
+      .progress-ring svg {
+        transform: rotate(-90deg);
+      }
+
+      .progress-ring circle {
+        fill: none;
+        stroke-width: 8;
+      }
+
+      .progress-ring .background {
+        stroke: #e2e8f0;
+      }
+
+      .progress-ring .progress {
+        stroke: #667eea;
+        stroke-linecap: round;
+        transition: stroke-dashoffset 1s linear;
+      }
+
+      .progress-ring.active .progress {
+        stroke: #48bb78;
+      }
+
+      .progress-ring.break .progress {
+        stroke: #ed8936;
+      }
+
+      .timer-label {
+        font-size: 18px;
+        color: #718096;
+        margin-bottom: 30px;
+        font-weight: 600;
+      }
+
+      .controls {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 40px;
+      }
+
+      button {
+        padding: 16px 32px;
+        border: none;
+        border-radius: 12px;
+        font-size: 18px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .btn-start {
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        color: white;
+        font-size: 20px;
+        padding: 20px 40px;
+      }
+
+      .btn-start:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 30px rgba(72, 187, 120, 0.4);
+      }
+
+      .btn-pause {
+        background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+        color: white;
+      }
+
+      .btn-pause:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 30px rgba(237, 137, 54, 0.4);
+      }
+
+      .btn-reset {
+        background: #e2e8f0;
+        color: #4a5568;
+      }
+
+      .btn-reset:hover {
+        background: #cbd5e0;
+      }
+
+      .session-info {
+        background: #f7fafc;
+        padding: 25px;
+        border-radius: 16px;
+        margin-top: 30px;
+      }
+
+      .session-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        text-align: center;
+      }
+
+      .stat-item {
+        padding: 15px;
+      }
+
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #667eea;
+        margin-bottom: 5px;
+      }
+
+      .stat-label {
+        font-size: 14px;
+        color: #718096;
+      }
+
+      .presets {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        margin-bottom: 30px;
+      }
+
+      .preset-btn {
+        padding: 10px 20px;
+        background: #f7fafc;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .preset-btn:hover {
+        border-color: #667eea;
+        background: white;
+      }
+
+      .preset-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+      }
+
+      .notification {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background: white;
+        padding: 20px 30px;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        display: none;
+        align-items: center;
+        gap: 15px;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+      }
+
+      .notification.show {
+        display: flex;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      .notification-icon {
+        font-size: 32px;
+      }
+
+      .notification-text {
+        flex: 1;
+      }
+
+      .notification-title {
+        font-weight: 700;
+        color: #2d3748;
+        margin-bottom: 5px;
+      }
+
+      .notification-message {
+        color: #718096;
+        font-size: 14px;
+      }
+
+      @media (max-width: 768px) {
+        .focus-card {
+          padding: 40px 30px;
+        }
+
+        .timer-display {
+          font-size: 64px;
+        }
+
+        .progress-ring {
+          width: 250px;
+          height: 250px;
+        }
+
+        .session-stats {
+          grid-template-columns: 1fr;
+        }
+
+        .controls {
+          flex-direction: column;
+        }
+
+        .back-btn {
+          top: 20px;
+          left: 20px;
+          padding: 8px 16px;
+          font-size: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a href="today.html" class="back-btn">← Back</a>
+
+    <div class="container">
+      <div class="focus-card">
+        <div class="task-name" id="taskName">Focus Session</div>
+
+        <div class="presets">
+          <button class="preset-btn active" onclick="setPreset(25)">
+            Pomodoro (25m)
+          </button>
+          <button class="preset-btn" onclick="setPreset(45)">
+            Deep Work (45m)
+          </button>
+          <button class="preset-btn" onclick="setPreset(15)">
+            Quick (15m)
+          </button>
+        </div>
+
+        <div class="timer-display" id="timerDisplay">25:00</div>
+        <div class="timer-label" id="timerLabel">Ready to focus?</div>
+
+        <div class="controls">
+          <button class="btn-start" id="startBtn" onclick="toggleTimer()">
+            <span>▶️</span>
+            <span>Start</span>
+          </button>
+          <button class="btn-reset" onclick="resetTimer()">
+            <span>↺</span>
+            <span>Reset</span>
+          </button>
+        </div>
+
+        <div class="session-info">
+          <div class="session-stats">
+            <div class="stat-item">
+              <div class="stat-value" id="sessionsToday">0</div>
+              <div class="stat-label">Sessions Today</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="focusTime">0m</div>
+              <div class="stat-label">Focus Time</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="currentStreak">0</div>
+              <div class="stat-label">Current Streak</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notification" id="notification">
+      <div class="notification-icon">🎉</div>
+      <div class="notification-text">
+        <div class="notification-title">Session Complete!</div>
+        <div class="notification-message">Great work! Time for a break.</div>
+      </div>
+    </div>
+
+    <script>
+      let timeLeft = 25 * 60; // seconds
+      let totalTime = 25 * 60;
+      let timerInterval = null;
+      let isRunning = false;
+      let isBreak = false;
+      let stats = {
+        sessionsToday: 0,
+        totalFocusTime: 0,
+        currentStreak: 0,
+      };
+
+      function loadStats() {
+        const saved = localStorage.getItem("focusStats");
+        if (saved) {
+          stats = JSON.parse(saved);
+          updateStatsDisplay();
+        }
+
+        const focusTask = localStorage.getItem("focusTask");
+        if (focusTask) {
+          const task = JSON.parse(focusTask);
+          document.getElementById("taskName").textContent = task.task;
+        }
+      }
+
+      function saveStats() {
+        localStorage.setItem("focusStats", JSON.stringify(stats));
+      }
+
+      function updateStatsDisplay() {
+        document.getElementById("sessionsToday").textContent =
+          stats.sessionsToday;
+        document.getElementById("focusTime").textContent =
+          Math.round(stats.totalFocusTime / 60) + "m";
+        document.getElementById("currentStreak").textContent =
+          stats.currentStreak;
+      }
+
+      function setPreset(minutes) {
+        if (isRunning) return;
+
+        document
+          .querySelectorAll(".preset-btn")
+          .forEach((btn) => btn.classList.remove("active"));
+        event.target.classList.add("active");
+
+        totalTime = minutes * 60;
+        timeLeft = totalTime;
+        updateDisplay();
+      }
+
+      function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, "0")}:${secs
+          .toString()
+          .padStart(2, "0")}`;
+      }
+
+      function updateDisplay() {
+        document.getElementById("timerDisplay").textContent =
+          formatTime(timeLeft);
+      }
+
+      function toggleTimer() {
+        if (isRunning) {
+          pauseTimer();
+        } else {
+          startTimer();
+        }
+      }
+
+      function startTimer() {
+        isRunning = true;
+        document.body.classList.add("focus-active");
+        document.getElementById("timerDisplay").classList.add("active");
+        document.getElementById("timerLabel").textContent = isBreak
+          ? "Break Time 😌"
+          : "Focus Time! 🎯";
+
+        const startBtn = document.getElementById("startBtn");
+        startBtn.innerHTML = "<span>⏸</span><span>Pause</span>";
+        startBtn.classList.remove("btn-start");
+        startBtn.classList.add("btn-pause");
+
+        timerInterval = setInterval(() => {
+          timeLeft--;
+          updateDisplay();
+
+          if (timeLeft <= 0) {
+            completeSession();
+          }
+        }, 1000);
+      }
+
+      function pauseTimer() {
+        isRunning = false;
+        clearInterval(timerInterval);
+        document.body.classList.remove("focus-active");
+        document.getElementById("timerDisplay").classList.remove("active");
+        document.getElementById("timerLabel").textContent = "Paused";
+
+        const startBtn = document.getElementById("startBtn");
+        startBtn.innerHTML = "<span>▶️</span><span>Resume</span>";
+        startBtn.classList.add("btn-start");
+        startBtn.classList.remove("btn-pause");
+      }
+
+      function resetTimer() {
+        pauseTimer();
+        timeLeft = totalTime;
+        isBreak = false;
+        updateDisplay();
+        document
+          .getElementById("timerDisplay")
+          .classList.remove("active", "break");
+        document.getElementById("timerLabel").textContent = "Ready to focus?";
+
+        const startBtn = document.getElementById("startBtn");
+        startBtn.innerHTML = "<span>▶️</span><span>Start</span>";
+        startBtn.classList.add("btn-start");
+        startBtn.classList.remove("btn-pause");
+      }
+
+      function completeSession() {
+        clearInterval(timerInterval);
+        isRunning = false;
+
+        if (!isBreak) {
+          // Completed focus session
+          stats.sessionsToday++;
+          stats.totalFocusTime += totalTime;
+          stats.currentStreak++;
+          saveStats();
+          updateStatsDisplay();
+
+          showNotification(
+            "Session Complete!",
+            "Great work! Time for a 5-minute break."
+          );
+          playSound();
+
+          // Start break
+          isBreak = true;
+          totalTime = 5 * 60;
+          timeLeft = totalTime;
+          document.getElementById("timerDisplay").classList.remove("active");
+          document.getElementById("timerDisplay").classList.add("break");
+          document.getElementById("timerLabel").textContent = "Break Time! 😌";
+          updateDisplay();
+        } else {
+          // Completed break
+          showNotification(
+            "Break Complete!",
+            "Ready for another focus session?"
+          );
+          playSound();
+
+          isBreak = false;
+          totalTime = 25 * 60;
+          timeLeft = totalTime;
+          document.getElementById("timerDisplay").classList.remove("break");
+          document.getElementById("timerLabel").textContent = "Ready to focus?";
+          updateDisplay();
+        }
+
+        const startBtn = document.getElementById("startBtn");
+        startBtn.innerHTML = "<span>▶️</span><span>Start</span>";
+        startBtn.classList.add("btn-start");
+        startBtn.classList.remove("btn-pause");
+        document.body.classList.remove("focus-active");
+      }
+
+      function showNotification(title, message) {
+        const notif = document.getElementById("notification");
+        notif.querySelector(".notification-title").textContent = title;
+        notif.querySelector(".notification-message").textContent = message;
+        notif.classList.add("show");
+
+        setTimeout(() => {
+          notif.classList.remove("show");
+        }, 5000);
+
+        // Browser notification
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("TaskPilot - " + title, {
+            body: message,
+            icon: "🏆",
+          });
+        }
+      }
+
+      function playSound() {
+        // Simple beep using Web Audio API
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = 800;
+        oscillator.type = "sine";
+
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.01,
+          audioContext.currentTime + 0.5
+        );
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+      }
+
+      // Request notification permission
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+
+      // Keyboard shortcuts
+      document.addEventListener("keydown", (e) => {
+        if (e.code === "Space") {
+          e.preventDefault();
+          toggleTimer();
+        } else if (e.code === "KeyR") {
+          e.preventDefault();
+          resetTimer();
+        }
+      });
+
+      // Prevent accidental page close
+      window.addEventListener("beforeunload", (e) => {
+        if (isRunning) {
+          e.preventDefault();
+          e.returnValue = "";
+        }
+      });
+
+      loadStats();
+      updateDisplay();
+    </script>
+  </body>
+</html>
