@@ -301,6 +301,49 @@ button {
   font-weight: 600;
 }
 
+.today-schedules-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.today-schedule-item {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f7fafc;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.today-schedule-item:hover {
+  background: #edf2f7;
+  border-color: #e2e8f0;
+}
+
+.today-schedule-item .dot {
+  width: 8px;
+  height: 8px;
+  background: #667eea;
+  border-radius: 50%;
+}
+
+.today-schedule-item .line-clamp {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.today-schedule-item .save-time {
+  color: #718096;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
 @media (max-width: 768px) {
   .dashboard {
     grid-template-columns: 1fr;

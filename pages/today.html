@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TaskPilot - Today</title>
-    <link rel="stylesheet" href="./css/today.css">
+    <link rel="stylesheet" href="./css/today.css" />
   </head>
   <body>
     <div class="container">
@@ -29,14 +29,30 @@
       let schedule = [];
       let completedTasks = new Set();
 
-      function loadSchedule() {
-        const saved = localStorage.getItem("todaySchedule");
-        if (saved) {
-          schedule = JSON.parse(saved);
-          const savedCompleted = localStorage.getItem("completedTasks");
-          if (savedCompleted) {
-            completedTasks = new Set(JSON.parse(savedCompleted));
+      async function loadSchedule() {
+        try {
+          const response = await fetch(`/schedules/today?_=${Date.now()}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.schedule) {
+              schedule = data.schedule;
+            } else {
+              schedule = []; // No schedule found or an empty schedule
+            }
+          } else if (response.status === 404) {
+            schedule = []; // Explicitly handle 404 (no schedule for today)
+          } else {
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
+        } catch (error) {
+          console.error("Error fetching today's schedule:", error);
+          alert("Failed to load today's schedule. Please try again later.");
+          schedule = [];
+        }
+
+        const savedCompleted = localStorage.getItem("completedTasks");
+        if (savedCompleted) {
+          completedTasks = new Set(JSON.parse(savedCompleted));
         }
         renderDashboard();
       }
@@ -45,22 +61,70 @@
         const now = new Date();
         const currentTime = now.getHours() * 60 + now.getMinutes();
 
+        // Helper: parse "HH:MM AM/PM" into minutes since midnight
+        const parseTimeToMinutes = (timeStr) => {
+          if (!timeStr) return NaN;
+          const parts = timeStr.trim().split(" ");
+          const timeVal = parts[0] || timeStr.trim();
+          const ampm = (parts[1] || "").toUpperCase();
+          let [h, m] = timeVal.split(":").map(Number);
+          if (Number.isNaN(h) || Number.isNaN(m)) return NaN;
+          if (ampm === "PM" && h < 12) h += 12;
+          if (ampm === "AM" && h === 12) h = 0; // midnight edge case
+          return h * 60 + m;
+        };
+
+        let nextUpcomingTask = null; // first task whose start >= current time
+
         for (let i = 0; i < schedule.length; i++) {
           const task = schedule[i];
-          const [hours, minutes] = task.time.split(":");
-          const taskTime = parseInt(hours) * 60 + parseInt(minutes);
+          const taskStartTimeInMinutes = parseTimeToMinutes(task.time);
+          // Fallback duration: prefer durationMinutes, else parse numeric from duration like "60 min", else 60
+          const parsedDuration =
+            typeof task.durationMinutes === "number"
+              ? task.durationMinutes
+              : typeof task.duration === "string"
+              ? parseInt(task.duration)
+              : 60;
+          const durationMinutes = Number.isFinite(parsedDuration)
+            ? parsedDuration
+            : 60;
+          const taskEndTimeInMinutes = taskStartTimeInMinutes + durationMinutes;
 
+          // Track the first upcoming task (start >= now) for boundary preference
           if (
-            taskTime <= currentTime &&
-            (i === schedule.length - 1 ||
-              parseInt(schedule[i + 1].time.split(":")[0]) * 60 +
-                parseInt(schedule[i + 1].time.split(":")[1]) >
-                currentTime)
+            nextUpcomingTask === null &&
+            taskStartTimeInMinutes >= currentTime
+          ) {
+            nextUpcomingTask = task;
+          }
+
+          // Active window: start <= now < end
+          if (
+            currentTime >= taskStartTimeInMinutes &&
+            currentTime < taskEndTimeInMinutes
           ) {
             return task;
           }
         }
-        return schedule[0];
+
+        // No active task: if we're exactly on a boundary or before the first task, prefer the future task
+        if (nextUpcomingTask) {
+          return nextUpcomingTask;
+        }
+
+        // Otherwise, the day is over: return the last task
+        if (schedule.length > 0) {
+          return schedule[schedule.length - 1];
+        }
+
+        // Default fallback when no schedule exists
+        return {
+          task: "No active task. Relax or plan your day!",
+          time: "",
+          duration: "",
+          priority: "low",
+        };
       }
 
       function toggleTask(index) {
@@ -147,6 +211,13 @@
                 </div>
 
                 <div class="card">
+                    <h2>🗂️ All Saved Schedules</h2>
+                    <div id="allSchedules"></div>
+                    <h3 style="margin-top:16px;">Today’s Versions</h3>
+                    <div id="todaySchedules" class="today-schedules-list"></div>
+                </div>
+
+                <div class="card">
                     <h2>📊 Progress</h2>
                     <div class="progress-bar">
                         <div class="progress-fill" style="width: ${progress}%"></div>
@@ -176,11 +247,158 @@
                     </div>
                 </div>
             `;
+
+        // After rendering base UI, fetch and render all schedules
+        fetchAllSchedules();
+        fetchTodaySchedulesList();
+      }
+
+      async function fetchAllSchedules() {
+        try {
+          const res = await fetch(`/schedules?_=${Date.now()}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (!data.success)
+            throw new Error(data.error || "Failed to load schedules");
+
+          const container = document.getElementById("allSchedules");
+          if (!data.schedules || data.schedules.length === 0) {
+            container.innerHTML = `<div class="empty-state"><p>No saved schedules yet.</p></div>`;
+            return;
+          }
+
+          const items = data.schedules
+            .map((s) => {
+              const preview = (s.plan || [])
+                .slice(0, 3)
+                .map((it) => `${it.time} ${it.task}`)
+                .join(" • ");
+              const savedTime = (function f() {
+                try {
+                  const d = new Date(s.created_at || s.date);
+                  return d.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                } catch (_) {
+                  return "";
+                }
+              })();
+              const promptText = s.prompt ? s.prompt : preview;
+              return `
+                <div class="today-schedule-item" title="${
+                  s.date
+                } • ${promptText}">
+                  <span class="dot"></span>
+                  <span class="line-clamp">${s.date} • ${promptText}</span>
+                  <span class="save-time">${savedTime}</span>
+                  <button class="btn-white" onclick="setActiveSchedule(${encodeURIComponent(
+                    JSON.stringify(s.plan)
+                  ).replace(
+                    /"/g,
+                    "&quot;"
+                  )}); event.stopPropagation();">Use</button>
+                  <button class="btn-white" onclick="deleteSchedule(${
+                    s.id
+                  }); event.stopPropagation();">Delete</button>
+                </div>
+              `;
+            })
+            .join("");
+
+          container.innerHTML = items;
+        } catch (e) {
+          const container = document.getElementById("allSchedules");
+          container.innerHTML = `<div class="empty-state"><p>Error loading schedules: ${e.message}</p></div>`;
+        }
+      }
+
+      function formatTime(ts) {
+        try {
+          const d = new Date(ts);
+          return d.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        } catch (_) {
+          return ts;
+        }
+      }
+
+      async function fetchTodaySchedulesList() {
+        try {
+          const now = new Date();
+          const yyyy = now.getFullYear();
+          const mm = String(now.getMonth() + 1).padStart(2, "0");
+          const dd = String(now.getDate()).padStart(2, "0");
+          const today = `${yyyy}-${mm}-${dd}`;
+          const res = await fetch(
+            `/schedules/by-date?date=${today}&_=${Date.now()}`
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (!data.success)
+            throw new Error(data.error || "Failed to load today schedules");
+
+          const container = document.getElementById("todaySchedules");
+          if (!data.schedules || data.schedules.length === 0) {
+            container.innerHTML = `<div class="empty-state"><p>No versions saved today.</p></div>`;
+            return;
+          }
+
+          container.innerHTML = data.schedules
+            .map((s, idx) => {
+              const preview = (s.plan || [])
+                .map((it) => `${it.time} ${it.task}`)
+                .join(" • ");
+              const promptText = s.prompt ? s.prompt : preview;
+              return `
+              <div class="today-schedule-item" onclick="setActiveSchedule(${encodeURIComponent(
+                JSON.stringify(s.plan)
+              ).replace(/"/g, "&quot;")})" title="${promptText}">
+                <span class="dot"></span>
+                <span class="line-clamp">${promptText}</span>
+                <span class="save-time">${formatTime(s.created_at)}</span>
+                <button class="btn-white" onclick="deleteSchedule(${
+                  s.id
+                }); event.stopPropagation();">Delete</button>
+              </div>
+            `;
+            })
+            .join("");
+        } catch (e) {
+          const container = document.getElementById("todaySchedules");
+          container.innerHTML = `<div class="empty-state"><p>Error: ${e.message}</p></div>`;
+        }
+      }
+
+      // Switch active schedule for today and re-render
+      function setActiveSchedule(planJson) {
+        try {
+          schedule = planJson; // already an array of tasks
+          // reset completed state when switching
+          completedTasks = new Set();
+          localStorage.removeItem("completedTasks");
+          renderDashboard();
+        } catch (e) {
+          alert("Failed to switch schedule");
+        }
+      }
+
+      async function deleteSchedule(id) {
+        try {
+          const res = await fetch(`/schedules/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // Refresh lists
+          fetchAllSchedules();
+          fetchTodaySchedulesList();
+        } catch (e) {
+          alert(`Failed to delete schedule: ${e.message}`);
+        }
       }
 
       function startFocusMode() {
-        localStorage.setItem("focusTask", JSON.stringify(getCurrentTask()));
-        window.location.href = "focus.html";
+        alert("Focus Mode is not yet implemented.");
       }
 
       function exportCalendar() {

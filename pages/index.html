@@ -76,6 +76,7 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
 
     <script>
       let currentSchedule = [];
+      let lastPromptText = "";
 
       function clearInput() {
         document.getElementById("planInput").value = "";
@@ -95,6 +96,7 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
 
       async function generatePlan() {
         const input = document.getElementById("planInput").value.trim();
+        lastPromptText = input;
 
         if (!input) {
           alert("Please write your daily plan first!");
@@ -143,41 +145,81 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
         }
       }
 
-      function generateSuggestions(input) {
-        // Simulate Meta Llama suggestions
-        const suggestions = [
-          {
-            icon: "⏰",
-            text: "Consider adding buffer time between meetings to avoid context switching fatigue.",
-          },
-          {
-            icon: "🎯",
-            text: "Your deep work block is well-placed in the morning when focus is typically highest.",
-          },
-          {
-            icon: "🏃",
-            text: "Great job prioritizing exercise! Morning workouts boost energy for the day.",
-          },
-          {
-            icon: "🍎",
-            text: "Remember to schedule meal breaks - your brain needs fuel to perform optimally.",
-          },
-        ];
+      async function generateSuggestions(input) {
+        document.getElementById("suggestionsLoading").classList.add("active");
+        document.getElementById("suggestionsContent").innerHTML = "";
 
+        try {
+          const response = await fetch("/generate-suggestions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ dailyPlan: input }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          if (data.success) {
+            displaySuggestions(data.suggestions);
+          } else {
+            throw new Error(data.error || "Failed to generate AI suggestions.");
+          }
+        } catch (error) {
+          console.error("Error generating AI suggestions:", error);
+          alert("Failed to generate AI suggestions. Please try again later.");
+          document
+            .getElementById("suggestionsLoading")
+            .classList.remove("active");
+          document.getElementById("suggestionsContent").innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">❌</div>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+        }
+      }
+
+      function displaySuggestions(suggestionsText) {
         document
           .getElementById("suggestionsLoading")
           .classList.remove("active");
+        const suggestionsList = suggestionsText
+          .split("\n")
+          .filter((line) => line.trim() !== "" && line.startsWith("-"));
+
+        if (suggestionsList.length === 0) {
+          document.getElementById("suggestionsContent").innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🤷‍♂️</div>
+                    <p>No suggestions generated. Try a different plan!</p>
+                </div>
+            `;
+          return;
+        }
+
         document.getElementById("suggestionsContent").innerHTML = `
                 <ul class="suggestions-list">
-                    ${suggestions
-                      .map(
-                        (s) => `
-                        <li class="suggestion-item">
-                            <span class="suggestion-icon">${s.icon}</span>
-                            <span>${s.text}</span>
-                        </li>
-                    `
-                      )
+                    ${suggestionsList
+                      .map((s) => {
+                        const iconMatch = s.match(/^(-\s*)(\S+)\s*(.*)/);
+                        const icon =
+                          iconMatch && iconMatch[2] ? iconMatch[2] : "💡"; // Default icon
+                        const text =
+                          iconMatch && iconMatch[3]
+                            ? iconMatch[3].trim()
+                            : s.replace(/^- /, "").trim();
+                        return `
+                            <li class="suggestion-item">
+                                <span class="suggestion-icon">${icon}</span>
+                                <span>${text}</span>
+                            </li>
+                        `;
+                      })
                       .join("")}
                 </ul>
             `;
@@ -186,9 +228,12 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
       function displaySchedule(aiPlan) {
         // Display the AI-generated plan directly as markdown/HTML
         document.getElementById("scheduleLoading").classList.remove("active");
+
+        currentSchedule = parseAiPlanToStructuredSchedule(aiPlan); // Populate global currentSchedule
+
         document.getElementById("scheduleContent").innerHTML = `
                 <div class="ai-plan-output">
-                    ${parseAiPlanToTable(aiPlan)}
+                    ${parseAiPlanToTable(currentSchedule)}
                 </div>
                 <div class="button-group" style="margin-top: 20px;">
                     <button class="btn-primary" onclick="saveSchedule()">
@@ -203,25 +248,72 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
             `;
       }
 
-      function parseAiPlanToTable(aiPlanText) {
+      function parseAiPlanToStructuredSchedule(aiPlanText) {
+        const structuredSchedule = [];
         const lines = aiPlanText
           .split("\n")
           .filter((line) => line.trim() !== "" && line.match(/^\d+\./));
-        let tableRows = "";
 
         lines.forEach((line) => {
-          // Example line: "1. **08:00 AM - 09:00 AM**: Review hackathon project progress and outline remaining tasks."
           const match = line.match(/^\d+\.\s*\*\*(.*?)\*\*:\s*(.*)/);
           if (match && match.length >= 3) {
-            const time = match[1].trim();
+            const timeRange = match[1].trim(); // e.g., "08:00 AM - 09:00 AM"
             const task = match[2].trim();
-            tableRows += `
+
+            let startTimeStr = "";
+            let endTimeStr = "";
+            let durationMinutes = 0;
+
+            const timeParts = timeRange.split("-");
+            if (timeParts.length === 2) {
+              startTimeStr = timeParts[0].trim();
+              endTimeStr = timeParts[1].trim();
+
+              const parseTime = (time) => {
+                const [timeVal, ampm] = time.split(" ");
+                let [hours, minutes] = timeVal.split(":").map(Number);
+                if (ampm === "PM" && hours < 12) hours += 12;
+                if (ampm === "AM" && hours === 12) hours = 0; // Midnight
+                return hours * 60 + minutes;
+              };
+
+              const startMinutes = parseTime(startTimeStr);
+              const endMinutes = parseTime(endTimeStr);
+
+              durationMinutes = endMinutes - startMinutes;
+              if (durationMinutes < 0) {
+                durationMinutes += 24 * 60; // Handle overnight tasks
+              }
+            } else if (timeRange.toLowerCase().includes("onwards")) {
+              startTimeStr = timeRange.replace(/onwards/i, "").trim();
+              durationMinutes = 1 * 60; // Default to 1 hour for 'onwards' tasks
+            } else {
+              startTimeStr = timeRange;
+              durationMinutes = 60; // Default to 1 hour if no range or 'onwards'
+            }
+
+            structuredSchedule.push({
+              time: startTimeStr,
+              task,
+              duration: `${durationMinutes} min`,
+              durationMinutes,
+              priority: "medium",
+            }); // Store parsed duration and default priority
+          }
+        });
+        return structuredSchedule;
+      }
+
+      function parseAiPlanToTable(structuredSchedule) {
+        let tableRows = "";
+
+        structuredSchedule.forEach((item) => {
+          tableRows += `
                             <tr>
-                                <td>${time}</td>
-                                <td>${task}</td>
+                                <td>${item.time}</td>
+                                <td>${item.task}</td>
                             </tr>
                         `;
-          }
         });
 
         return `
@@ -239,10 +331,46 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
             `;
       }
 
-      function saveSchedule() {
-        localStorage.setItem("todaySchedule", JSON.stringify(currentSchedule));
-        alert("✅ Schedule saved to Today dashboard!");
-        setTimeout(() => (window.location.href = "today.html"), 1000);
+      async function saveSchedule() {
+        if (!currentSchedule || currentSchedule.length === 0) {
+          alert("Nothing to save! Please generate a plan first.");
+          return;
+        }
+
+        const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
+        const planJson = JSON.stringify(currentSchedule); // Convert array of objects to JSON string
+
+        try {
+          const response = await fetch("/save-schedule", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              date: today,
+              plan: planJson,
+              prompt: lastPromptText,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          if (data.success) {
+            alert("✅ Schedule saved to database!");
+            setTimeout(() => (window.location.href = "today.html"), 1000);
+          } else {
+            throw new Error(
+              data.error || "Failed to save schedule to database."
+            );
+          }
+        } catch (error) {
+          console.error("Error saving schedule:", error);
+          alert("Failed to save schedule. Please try again later.");
+        }
       }
 
       function exportCalendar() {
