@@ -109,7 +109,38 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
 
         // Simulate API calls (replace with actual API calls)
         setTimeout(() => generateSuggestions(input), 1000);
-        setTimeout(() => generateSchedule(input), 1500);
+
+        try {
+          const response = await fetch("/generate-plan", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ dailyPlan: input }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          if (data.success) {
+            displaySchedule(data.aiPlan);
+          } else {
+            throw new Error(data.error || "Failed to generate AI plan.");
+          }
+        } catch (error) {
+          console.error("Error generating AI plan:", error);
+          alert("Failed to generate AI plan. Please try again later.");
+          document.getElementById("scheduleLoading").classList.remove("active");
+          document.getElementById("scheduleContent").innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">❌</div>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+        }
       }
 
       function generateSuggestions(input) {
@@ -152,99 +183,13 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
             `;
       }
 
-      function generateSchedule(input) {
-        // Simulate Cerebras structured schedule
-        currentSchedule = [
-          {
-            time: "07:00 AM",
-            task: "Gym Workout",
-            duration: "60 min",
-            priority: "high",
-          },
-          {
-            time: "08:15 AM",
-            task: "Breakfast & Prep",
-            duration: "45 min",
-            priority: "medium",
-          },
-          {
-            time: "09:00 AM",
-            task: "Deep Work Session",
-            duration: "120 min",
-            priority: "high",
-          },
-          {
-            time: "11:15 AM",
-            task: "Team Standup",
-            duration: "15 min",
-            priority: "high",
-          },
-          {
-            time: "11:30 AM",
-            task: "Email & Admin",
-            duration: "30 min",
-            priority: "low",
-          },
-          {
-            time: "12:00 PM",
-            task: "Lunch Break",
-            duration: "60 min",
-            priority: "medium",
-          },
-          {
-            time: "01:00 PM",
-            task: "Project Work",
-            duration: "120 min",
-            priority: "high",
-          },
-          {
-            time: "03:00 PM",
-            task: "Break & Walk",
-            duration: "15 min",
-            priority: "low",
-          },
-          {
-            time: "03:15 PM",
-            task: "Meetings & Calls",
-            duration: "105 min",
-            priority: "medium",
-          },
-          {
-            time: "05:00 PM",
-            task: "Wrap-up & Planning",
-            duration: "30 min",
-            priority: "low",
-          },
-          {
-            time: "06:00 PM",
-            task: "Groceries",
-            duration: "45 min",
-            priority: "medium",
-          },
-          {
-            time: "08:00 PM",
-            task: "Dinner with Friends",
-            duration: "120 min",
-            priority: "high",
-          },
-        ];
-
+      function displaySchedule(aiPlan) {
+        // Display the AI-generated plan directly as markdown/HTML
         document.getElementById("scheduleLoading").classList.remove("active");
         document.getElementById("scheduleContent").innerHTML = `
-                <ul class="schedule-list">
-                    ${currentSchedule
-                      .map(
-                        (item) => `
-                        <li class="schedule-item">
-                            <div class="schedule-time">${item.time}</div>
-                            <div class="schedule-task">${item.task}</div>
-                            <div class="schedule-duration">${item.duration}</div>
-                            <span class="priority-badge priority-${item.priority}">${item.priority}</span>
-                        </li>
-                    `
-                      )
-                      .join("")}
-                </ul>
+                <div class="ai-plan-output">
+                    ${parseAiPlanToTable(aiPlan)}
+                </div>
                 <div class="button-group" style="margin-top: 20px;">
                     <button class="btn-primary" onclick="saveSchedule()">
                         <span>💾</span>
@@ -255,6 +200,42 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
                         <span>Export .ics</span>
                     </button>
                 </div>
+            `;
+      }
+
+      function parseAiPlanToTable(aiPlanText) {
+        const lines = aiPlanText
+          .split("\n")
+          .filter((line) => line.trim() !== "" && line.match(/^\d+\./));
+        let tableRows = "";
+
+        lines.forEach((line) => {
+          // Example line: "1. **08:00 AM - 09:00 AM**: Review hackathon project progress and outline remaining tasks."
+          const match = line.match(/^\d+\.\s*\*\*(.*?)\*\*:\s*(.*)/);
+          if (match && match.length >= 3) {
+            const time = match[1].trim();
+            const task = match[2].trim();
+            tableRows += `
+                            <tr>
+                                <td>${time}</td>
+                                <td>${task}</td>
+                            </tr>
+                        `;
+          }
+        });
+
+        return `
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Task</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
             `;
       }
 

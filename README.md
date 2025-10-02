@@ -46,19 +46,60 @@ The result: you don’t just plan—you leave with a **full, validated daily roa
 ## 📂 Repository Structure
 
 ```
-├─ index.html        # Plan page
-├─ today.html        # Today dashboard
-├─ tasks.html        # Task manager
-├─ focus.html        # Focus timer
-├─ settings.html     # Settings page
-├─ css/
-├─ js/
-└─ public/
+.├── .git/
+├── .gitignore
+├── pages/
+│   ├── index.html
+│   ├── today.html
+│   ├── tasks.html
+│   ├── focus.html
+│   ├── settings.html
+│   ├── css/
+│   └── js/
+├── server/
+│   ├── src/
+│   │   ├── index.js
+│   │   └── db/
+│   ├── package.json
+│   └── node_modules/
+├── README.md
+└── .env
 ```
 
 ---
 
-## 📹 Demo
+## ⚙️ Getting Started (Server)
+
+To run the backend server:
+
+1.  **Navigate to the server directory:**
+    ```bash
+    cd server
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+3.  **Create a `.env` file:**
+    In the **root directory of the project** (one level above the `server` folder), create a file named `.env` and add your Cerebras API key:
+    ```
+    CEREBRAS_API_KEY="your_cerebras_api_key_here"
+    ```
+    *Make sure to replace `"your_cerebras_api_key_here"` with your actual key obtained from Cerebras.* (See [Cerebras Inference documentation](https://inference-docs.cerebras.ai/introduction) for details on getting an API key).
+
+4.  **Start the server:**
+    ```bash
+    npm start
+    # Or for development with hot-reloading:
+    # npm run dev
+    ```
+    The server will typically run on `http://localhost:5050`.
+
+---
+
+<!-- ## 📹 Demo
 
 🎥 A 2-minute demo video will showcase:
 
@@ -67,7 +108,7 @@ The result: you don’t just plan—you leave with a **full, validated daily roa
 - JSON schedule generation (Cerebras)
 - Calendar export & focus timer (MCP tools)
 
----
+--- -->
 
 ## 📝 License
 
