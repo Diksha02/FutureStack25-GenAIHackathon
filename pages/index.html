@@ -43,21 +43,78 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
         </div>
 
         <div class="card">
-          <h2>AI Suggestions</h2>
+          <h2>🧠 AI Coach Analysis</h2>
+          <p
+            style="
+              color: #718096;
+              font-size: 14px;
+              margin-top: -10px;
+              margin-bottom: 15px;
+            "
+          >
+            Smart analysis of your schedule with actionable improvements
+          </p>
           <div class="loading" id="suggestionsLoading">
             <div class="spinner"></div>
-            <p>Generating suggestions...</p>
+            <p>AI coach is analyzing your schedule...</p>
           </div>
           <div id="suggestionsContent">
             <div class="empty-state">
-              <div class="empty-state-icon"></div>
-              <p>AI coaching suggestions will appear here</p>
+              <div class="empty-state-icon">🤖</div>
+              <p>
+                AI coach will analyze your schedule and provide specific
+                suggestions
+              </p>
             </div>
           </div>
         </div>
 
         <div class="card">
           <h2>Structured Schedule</h2>
+
+          <!-- Model Selection Banner -->
+          <div
+            id="modelBanner"
+            style="
+              display: none;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              padding: 12px 20px;
+              border-radius: 8px;
+              margin-bottom: 15px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+            "
+          >
+            <div>
+              <strong>🤖 AI Model:</strong>
+              <span id="currentModelName">Loading...</span>
+              <span
+                style="margin-left: 10px; opacity: 0.9; font-size: 14px"
+                id="currentModelQuality"
+              ></span>
+            </div>
+            <button
+              onclick="window.location.href='/settings.html'"
+              style="
+                background: rgba(255, 255, 255, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                padding: 6px 16px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: all 0.2s;
+              "
+              onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+              onmouseout="this.style.background='rgba(255,255,255,0.2)'"
+            >
+              Change Model ⚙️
+            </button>
+          </div>
+
           <div class="loading" id="scheduleLoading">
             <div class="spinner"></div>
             <p>Building your schedule...</p>
@@ -75,6 +132,38 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
     <script>
       let currentSchedule = [];
       let lastPromptText = "";
+
+      // Load current model info on page load
+      async function loadCurrentModel() {
+        try {
+          const response = await fetch("/api/models");
+          const data = await response.json();
+
+          if (data.success && data.models && data.currentModel) {
+            const currentModel = data.models.find(
+              (m) => m.id === data.currentModel
+            );
+            if (currentModel) {
+              document.getElementById("currentModelName").textContent =
+                currentModel.name;
+              document.getElementById(
+                "currentModelQuality"
+              ).textContent = `${currentModel.speed} | ${currentModel.quality}`;
+              document.getElementById("modelBanner").style.display = "flex";
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load current model:", error);
+          // Show banner anyway with default text
+          document.getElementById("currentModelName").textContent =
+            "Default Model";
+          document.getElementById("currentModelQuality").textContent = "";
+          document.getElementById("modelBanner").style.display = "flex";
+        }
+      }
+
+      // Load model info when page loads
+      window.addEventListener("DOMContentLoaded", loadCurrentModel);
 
       function clearInput() {
         document.getElementById("planInput").value = "";
@@ -107,10 +196,8 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
         document.getElementById("suggestionsContent").innerHTML = "";
         document.getElementById("scheduleContent").innerHTML = "";
 
-        // Simulate API calls (replace with actual API calls)
-        setTimeout(() => generateSuggestions(input), 1000);
-
         try {
+          // STEP 1: Generate the schedule first
           const response = await fetch("/generate-plan", {
             method: "POST",
             headers: {
@@ -119,31 +206,93 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
             body: JSON.stringify({ dailyPlan: input }),
           });
 
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
           const data = await response.json();
 
           if (data.success) {
             displaySchedule(data.aiPlan);
+
+            // Store metrics in localStorage for Settings page
+            if (data.metadata) {
+              localStorage.setItem(
+                "lastGenMetrics",
+                JSON.stringify(data.metadata)
+              );
+
+              // Update model banner to show it was just used
+              const modelResponse = await fetch("/api/models");
+              const modelData = await modelResponse.json();
+              if (modelData.success) {
+                const usedModel = modelData.models.find(
+                  (m) => m.id === data.metadata.model
+                );
+                if (usedModel) {
+                  document.getElementById(
+                    "currentModelName"
+                  ).textContent = `${usedModel.name} (Just used - ${data.metadata.latency}ms)`;
+                  document.getElementById(
+                    "currentModelQuality"
+                  ).textContent = `${usedModel.speed} | ${usedModel.quality}`;
+                }
+              }
+            }
+
+            // STEP 2: Now generate schedule-aware suggestions
+            // Pass the structured schedule to the coach
+            generateSuggestions(input, currentSchedule);
           } else {
-            throw new Error(data.error || "Failed to generate AI plan.");
+            // Handle error from backend
+            const isRateLimit = response.status === 429 || data.retryable;
+            const errorMessage = data.error || "Failed to generate AI plan.";
+
+            console.error("Error generating AI plan:", errorMessage);
+            document
+              .getElementById("scheduleLoading")
+              .classList.remove("active");
+            document
+              .getElementById("suggestionsLoading")
+              .classList.remove("active");
+
+            if (isRateLimit) {
+              // Show rate limit message with retry button
+              document.getElementById("scheduleContent").innerHTML = `
+                <div class="empty-state">
+                  <div class="empty-state-icon">⏳</div>
+                  <p style="color: #e67e22; font-weight: 500;">${errorMessage}</p>
+                  <p style="color: #718096; font-size: 14px; margin-top: 10px;">
+                    Cerebras is experiencing high traffic. The system will automatically retry.
+                  </p>
+                  <button onclick="generatePlan()" 
+                          style="margin-top: 15px; padding: 10px 20px; background: #5568d3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
+                    🔄 Retry Now
+                  </button>
+                </div>
+              `;
+            } else {
+              // Show generic error
+              document.getElementById("scheduleContent").innerHTML = `
+                <div class="empty-state">
+                  <div class="empty-state-icon">❌</div>
+                  <p>Error: ${errorMessage}</p>
+                </div>
+              `;
+            }
           }
         } catch (error) {
           console.error("Error generating AI plan:", error);
-          alert("Failed to generate AI plan. Please try again later.");
           document.getElementById("scheduleLoading").classList.remove("active");
+          document
+            .getElementById("suggestionsLoading")
+            .classList.remove("active");
           document.getElementById("scheduleContent").innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">❌</div>
-                        <p>Error: ${error.message}</p>
+                        <p>Network error. Please check your connection and try again.</p>
                     </div>
                 `;
         }
       }
 
-      async function generateSuggestions(input) {
+      async function generateSuggestions(input, schedule = null) {
         document.getElementById("suggestionsLoading").classList.add("active");
         document.getElementById("suggestionsContent").innerHTML = "";
 
@@ -153,30 +302,62 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ dailyPlan: input }),
+            body: JSON.stringify({
+              dailyPlan: input,
+              schedule: schedule, // Pass the schedule for analysis
+            }),
           });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
 
           const data = await response.json();
 
           if (data.success) {
             displaySuggestions(data.suggestions);
           } else {
-            throw new Error(data.error || "Failed to generate AI suggestions.");
+            // Handle error with user-friendly message
+            const isRateLimit = response.status === 429 || data.retryable;
+            const errorMessage =
+              data.error || "Failed to generate AI suggestions.";
+
+            console.error("Error generating AI suggestions:", errorMessage);
+
+            document
+              .getElementById("suggestionsLoading")
+              .classList.remove("active");
+
+            if (isRateLimit) {
+              // Show rate limit message with retry option
+              document.getElementById("suggestionsContent").innerHTML = `
+                <div class="empty-state">
+                  <div class="empty-state-icon">⏳</div>
+                  <p style="color: #e67e22; font-weight: 500;">${errorMessage}</p>
+                  <button onclick="generateSuggestions('${input.replace(
+                    /'/g,
+                    "\\'"
+                  )}', currentSchedule)" 
+                          style="margin-top: 15px; padding: 10px 20px; background: #5568d3; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
+                    🔄 Try Again
+                  </button>
+                </div>
+              `;
+            } else {
+              // Show generic error
+              document.getElementById("suggestionsContent").innerHTML = `
+                <div class="empty-state">
+                  <div class="empty-state-icon">❌</div>
+                  <p>Error: ${errorMessage}</p>
+                </div>
+              `;
+            }
           }
         } catch (error) {
           console.error("Error generating AI suggestions:", error);
-          alert("Failed to generate AI suggestions. Please try again later.");
           document
             .getElementById("suggestionsLoading")
             .classList.remove("active");
           document.getElementById("suggestionsContent").innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">❌</div>
-                        <p>Error: ${error.message}</p>
+                        <p>Network error. Please check your connection and try again.</p>
                     </div>
                 `;
         }
@@ -186,41 +367,143 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
         document
           .getElementById("suggestionsLoading")
           .classList.remove("active");
-        const suggestionsList = suggestionsText
-          .split("\n")
-          .filter((line) => line.trim() !== "" && line.startsWith("-"));
 
-        if (suggestionsList.length === 0) {
-          document.getElementById("suggestionsContent").innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">🤷‍♂️</div>
-                    <p>No suggestions generated. Try a different plan!</p>
-                </div>
-            `;
-          return;
+        // Parse structured coaching format with sections
+        const sections = [];
+        const lines = suggestionsText.split("\n");
+        let currentSection = null;
+
+        lines.forEach((line) => {
+          const trimmed = line.trim();
+
+          // Check if line is a section header (with or without bold markers)
+          if (trimmed.match(/^(\*\*)?[✅⚠️💡🧠]/)) {
+            // Save previous section
+            if (currentSection) {
+              sections.push(currentSection);
+            }
+            // Start new section - remove bold markers and trailing colons
+            const headerText = trimmed
+              .replace(/^\*\*/, "")
+              .replace(/\*\*:?$/, "")
+              .replace(/:$/, "")
+              .trim();
+            currentSection = {
+              header: headerText,
+              items: [],
+            };
+          }
+          // Check if line is a bullet point (may have emoji at start after *)
+          else if (
+            trimmed.startsWith("*") &&
+            trimmed.length > 1 &&
+            currentSection
+          ) {
+            // Remove the leading * and optional emoji, then trim
+            let itemText = trimmed.replace(/^\*\s*/, "");
+            // Remove leading emoji if present (any emoji character)
+            itemText = itemText.replace(/^[\u{1F000}-\u{1F9FF}]\s*/u, "");
+            if (itemText) {
+              currentSection.items.push(itemText);
+            }
+          }
+        });
+
+        // Add last section
+        if (currentSection) {
+          sections.push(currentSection);
         }
 
-        document.getElementById("suggestionsContent").innerHTML = `
-                <ul class="suggestions-list">
-                    ${suggestionsList
-                      .map((s) => {
-                        const iconMatch = s.match(/^(-\s*)(\S+)\s*(.*)/);
-                        const icon =
-                          iconMatch && iconMatch[2] ? iconMatch[2] : "💡"; // Default icon
-                        const text =
-                          iconMatch && iconMatch[3]
-                            ? iconMatch[3].trim()
-                            : s.replace(/^- /, "").trim();
-                        return `
-                            <li class="suggestion-item">
-                                <span class="suggestion-icon">${icon}</span>
-                                <span>${text}</span>
-                            </li>
-                        `;
-                      })
-                      .join("")}
-                </ul>
-            `;
+        // If we found structured sections, display them nicely
+        if (sections.length > 0) {
+          const html = `
+            <div class="coach-analysis">
+              ${sections
+                .map((section) => {
+                  // Determine section color based on emoji
+                  let sectionColor = "#5568d3";
+                  let bgColor = "#f0f4ff";
+
+                  if (section.header.includes("✅")) {
+                    sectionColor = "#10b981";
+                    bgColor = "#ecfdf5";
+                  } else if (section.header.includes("⚠️")) {
+                    sectionColor = "#f59e0b";
+                    bgColor = "#fef3c7";
+                  } else if (section.header.includes("💡")) {
+                    sectionColor = "#8b5cf6";
+                    bgColor = "#f5f3ff";
+                  } else if (section.header.includes("🧠")) {
+                    sectionColor = "#06b6d4";
+                    bgColor = "#ecfeff";
+                  }
+
+                  return `
+                  <div class="coach-section" style="
+                    margin-bottom: 20px;
+                    padding: 20px;
+                    background: ${bgColor};
+                    border-left: 4px solid ${sectionColor};
+                    border-radius: 8px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                  ">
+                    <h3 style="
+                      margin: 0 0 15px 0;
+                      font-size: 17px;
+                      font-weight: 600;
+                      color: ${sectionColor};
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                    ">
+                      ${section.header}
+                    </h3>
+                    <ul style="
+                      margin: 0;
+                      padding-left: 24px;
+                      list-style: none;
+                    ">
+                      ${section.items
+                        .map(
+                          (item) => `
+                        <li style="
+                          margin-bottom: 10px;
+                          line-height: 1.7;
+                          color: #374151;
+                          position: relative;
+                          padding-left: 8px;
+                        ">
+                          <span style="
+                            position: absolute;
+                            left: -16px;
+                            top: 8px;
+                            width: 6px;
+                            height: 6px;
+                            background: ${sectionColor};
+                            border-radius: 50%;
+                          "></span>
+                          ${item}
+                        </li>
+                      `
+                        )
+                        .join("")}
+                    </ul>
+                  </div>
+                `;
+                })
+                .join("")}
+            </div>
+          `;
+
+          document.getElementById("suggestionsContent").innerHTML = html;
+        } else {
+          // Fallback: Show raw text if parsing fails
+          document.getElementById("suggestionsContent").innerHTML = `
+            <div style="padding: 20px; background: #f7fafc; border-radius: 8px; white-space: pre-wrap; line-height: 1.6;">
+              ${suggestionsText.trim()}
+            </div>
+          `;
+        }
       }
 
       function displaySchedule(aiPlan) {

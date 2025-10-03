@@ -174,6 +174,98 @@
         </div>
 
         <div class="card">
+          <h2>AI Model Settings</h2>
+          <p style="color: #718096; margin-bottom: 20px">
+            Choose which Cerebras model to use for AI plan generation. Faster
+            models generate plans quickly but may be less detailed, while larger
+            models provide higher quality at the cost of speed.
+          </p>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-label">AI Model</div>
+              <div class="setting-description">
+                Select the Cerebras Llama model for plan generation
+              </div>
+            </div>
+            <div class="setting-control">
+              <select id="aiModel" onchange="handleModelChange()">
+                <option value="">Loading models...</option>
+              </select>
+            </div>
+          </div>
+
+          <div
+            id="modelInfo"
+            style="
+              margin-top: 20px;
+              padding: 15px;
+              background: #f7fafc;
+              border-radius: 8px;
+              display: none;
+            "
+          >
+            <h3 style="margin: 0 0 10px 0; font-size: 16px">
+              Model Information
+            </h3>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                font-size: 14px;
+              "
+            >
+              <div><strong>Speed:</strong> <span id="modelSpeed">-</span></div>
+              <div>
+                <strong>Quality:</strong> <span id="modelQuality">-</span>
+              </div>
+              <div>
+                <strong>Tokens/sec:</strong> <span id="modelTokens">-</span>
+              </div>
+              <div>
+                <strong>Best for:</strong> <span id="modelBestFor">-</span>
+              </div>
+            </div>
+            <p
+              style="margin: 10px 0 0 0; color: #4a5568"
+              id="modelDescription"
+            ></p>
+          </div>
+
+          <div
+            id="modelMetrics"
+            style="
+              margin-top: 15px;
+              padding: 15px;
+              background: #edf2f7;
+              border-radius: 8px;
+              display: none;
+            "
+          >
+            <h3 style="margin: 0 0 10px 0; font-size: 16px">
+              Last Generation Metrics
+            </h3>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+                font-size: 14px;
+              "
+            >
+              <div>
+                <strong>Latency:</strong> <span id="metricLatency">-</span>
+              </div>
+              <div>
+                <strong>Tokens Used:</strong> <span id="metricTokens">-</span>
+              </div>
+              <div><strong>Model:</strong> <span id="metricModel">-</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
           <h2>Data Management</h2>
 
           <div class="setting-item">
@@ -517,6 +609,86 @@
         reader.readAsText(file);
       }
 
+      // Model management
+      let availableModels = [];
+      let currentModelData = null;
+
+      async function loadModels() {
+        try {
+          const response = await fetch("/api/models");
+          const data = await response.json();
+
+          if (data.success) {
+            availableModels = data.models;
+            const currentModel = data.currentModel;
+
+            // Populate dropdown
+            const select = document.getElementById("aiModel");
+            select.innerHTML = "";
+
+            availableModels.forEach((model) => {
+              const option = document.createElement("option");
+              option.value = model.id;
+              option.textContent = model.name;
+              if (model.id === currentModel) {
+                option.selected = true;
+                updateModelInfo(model);
+              }
+              select.appendChild(option);
+            });
+          }
+        } catch (error) {
+          console.error("Failed to load models:", error);
+          document.getElementById("aiModel").innerHTML =
+            '<option value="">Error loading models</option>';
+        }
+      }
+
+      function updateModelInfo(model) {
+        currentModelData = model;
+        document.getElementById("modelSpeed").textContent = model.speed;
+        document.getElementById("modelQuality").textContent = model.quality;
+        document.getElementById("modelTokens").textContent =
+          model.tokensPerSecond;
+        document.getElementById("modelBestFor").textContent = model.bestFor;
+        document.getElementById("modelDescription").textContent =
+          model.description;
+        document.getElementById("modelInfo").style.display = "block";
+      }
+
+      async function handleModelChange() {
+        const select = document.getElementById("aiModel");
+        const modelId = select.value;
+
+        if (!modelId) return;
+
+        const model = availableModels.find((m) => m.id === modelId);
+        if (!model) return;
+
+        try {
+          const response = await fetch("/api/models/set", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ modelId }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            updateModelInfo(model);
+            alert(
+              `Model switched to ${model.name}!\n\nSpeed: ${model.speed}\nQuality: ${model.quality}`
+            );
+            console.log("Model changed:", data);
+          } else {
+            alert("Failed to change model: " + data.error);
+          }
+        } catch (error) {
+          console.error("Error changing model:", error);
+          alert("Failed to change model. Please try again.");
+        }
+      }
+
       function clearAllData() {
         if (
           confirm(
@@ -548,7 +720,10 @@
           'select, input[type="checkbox"], input[type="number"]'
         )
         .forEach((element) => {
-          if (element.id === "notifications") {
+          if (element.id === "aiModel") {
+            // Model changes handled by handleModelChange()
+            return;
+          } else if (element.id === "notifications") {
             element.addEventListener("change", handleNotificationToggle);
           } else if (element.id === "sounds") {
             element.addEventListener("change", handleSoundToggle);
@@ -557,7 +732,29 @@
           }
         });
 
+      // Load last generation metrics
+      function loadLastMetrics() {
+        const metricsStr = localStorage.getItem("lastGenMetrics");
+        if (metricsStr) {
+          try {
+            const metrics = JSON.parse(metricsStr);
+            document.getElementById("metricLatency").textContent =
+              metrics.latency ? `${metrics.latency}ms` : "-";
+            document.getElementById("metricTokens").textContent =
+              metrics.tokensUsed ? JSON.stringify(metrics.tokensUsed) : "-";
+            document.getElementById("metricModel").textContent =
+              metrics.model || "-";
+            document.getElementById("modelMetrics").style.display = "block";
+          } catch (e) {
+            console.error("Error loading metrics:", e);
+          }
+        }
+      }
+
+      // Load settings and models on page load
       loadSettings();
+      loadModels();
+      loadLastMetrics();
     </script>
   </body>
 </html>

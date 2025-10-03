@@ -22,6 +22,15 @@ const initDb = () => {
       plan TEXT NOT NULL
     );
   `);
+
+  // Create settings table for persisting app configuration
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
+    );
+  `);
   // Detect and add columns if missing
   try {
     const cols = db.prepare("PRAGMA table_info(schedules)").all();
@@ -160,6 +169,34 @@ const updateScheduleById = (id, plan) => {
   return info.changes;
 };
 
+// Settings management
+const getSetting = (key, defaultValue = null) => {
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+    return row ? row.value : defaultValue;
+  } catch (error) {
+    console.error(`Error getting setting ${key}:`, error);
+    return defaultValue;
+  }
+};
+
+const setSetting = (key, value) => {
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO settings (key, value, updated_at) 
+      VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime'))
+      ON CONFLICT(key) DO UPDATE SET 
+        value = excluded.value,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(key, value);
+    return true;
+  } catch (error) {
+    console.error(`Error setting ${key}:`, error);
+    return false;
+  }
+};
+
 export {
   initDb,
   saveScheduleToDb,
@@ -168,4 +205,6 @@ export {
   getSchedulesByDate,
   deleteScheduleById,
   updateScheduleById,
+  getSetting,
+  setSetting,
 };

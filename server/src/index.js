@@ -10,6 +10,8 @@ import {
   getSchedulesByDate,
   deleteScheduleById,
   updateScheduleById,
+  getSetting,
+  setSetting,
 } from "./db/database.js";
 import Cerebras from "@cerebras/cerebras_cloud_sdk";
 
@@ -28,8 +30,102 @@ const client = new Cerebras({
   apiKey: process.env["CEREBRAS_API_KEY"],
 });
 
-// Initialize the database
+// Retry configuration for rate limiting
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 5000,
+  backoffMultiplier: 2,
+};
+
+// Helper function to retry API calls with exponential backoff
+async function retryWithBackoff(apiCall, retries = RETRY_CONFIG.maxRetries) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await apiCall();
+    } catch (error) {
+      const isRateLimit =
+        error.status === 429 ||
+        (error.error && error.error.type === "too_many_requests_error");
+      const isLastAttempt = attempt === retries;
+
+      if (isRateLimit && !isLastAttempt) {
+        const delay = Math.min(
+          RETRY_CONFIG.initialDelayMs *
+            Math.pow(RETRY_CONFIG.backoffMultiplier, attempt),
+          RETRY_CONFIG.maxDelayMs
+        );
+
+        console.log(
+          `Rate limit hit. Retrying in ${delay}ms... (Attempt ${attempt + 1}/${
+            retries + 1
+          })`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      // Re-throw error if not rate limit or last attempt
+      throw error;
+    }
+  }
+}
+
+// Available Cerebras models with metadata
+const AVAILABLE_MODELS = [
+  {
+    id: "llama-4-scout-17b-16e-instruct",
+    name: "Llama 4 Scout 17B",
+    description: "Ultra-fast model optimized for quick responses",
+    speed: "⚡ Very Fast",
+    quality: "⭐⭐⭐ Good",
+    tokensPerSecond: "~800",
+    bestFor: "Quick plans, simple scheduling, real-time responses",
+  },
+  {
+    id: "llama3.1-8b",
+    name: "Llama 3.1 8B",
+    description: "Balanced speed and quality for everyday use",
+    speed: "⚡⚡ Fast",
+    quality: "⭐⭐⭐⭐ Very Good",
+    tokensPerSecond: "~500",
+    bestFor: "General purpose, balanced performance, daily planning",
+  },
+  {
+    id: "llama3.3-70b",
+    name: "Llama 3.3 70B",
+    description: "High-quality model with advanced reasoning",
+    speed: "⚡⚡ Moderate",
+    quality: "⭐⭐⭐⭐⭐ Excellent",
+    tokensPerSecond: "~200",
+    bestFor: "Complex plans, detailed analysis, multi-step reasoning",
+  },
+  {
+    id: "llama3.1-70b",
+    name: "Llama 3.1 70B",
+    description: "Powerful model for detailed planning",
+    speed: "⚡⚡ Moderate",
+    quality: "⭐⭐⭐⭐⭐ Excellent",
+    tokensPerSecond: "~200",
+    bestFor: "Detailed schedules, comprehensive planning",
+  },
+  {
+    id: "llama-3.3-70b-instruct",
+    name: "Llama 3.3 70B Instruct",
+    description: "Instruction-tuned for following complex directions",
+    speed: "⚡⚡ Moderate",
+    quality: "⭐⭐⭐⭐⭐ Excellent",
+    tokensPerSecond: "~200",
+    bestFor: "Structured output, detailed instructions, complex tasks",
+  },
+];
+
+// Initialize the database first
 initDb();
+
+// Load current model from database (persisted setting)
+let currentModel = getSetting("currentModel", "llama-4-scout-17b-16e-instruct");
+console.log(`Loaded model from database: ${currentModel}`);
 
 // Root endpoint
 app.get("/", (req, res) => {
@@ -210,6 +306,7 @@ app.get("/schedules/by-date", async (req, res) => {
 // New endpoint for Meta Llama suggestions
 app.post("/generate-suggestions", async (req, res) => {
   const userDailyPlan = req.body.dailyPlan;
+  const generatedSchedule = req.body.schedule; // NEW: Receive the generated schedule
 
   if (!userDailyPlan) {
     return res
@@ -218,35 +315,119 @@ app.post("/generate-suggestions", async (req, res) => {
   }
 
   try {
-    const chatCompletion = await client.chat.completions.create({
-      model: "llama-4-scout-17b-16e-instruct", // Use the same Cerebras Llama model
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an AI assistant specialized in providing helpful and actionable productivity suggestions based on a user's daily plan. Provide concise, bullet-point suggestions. Each suggestion should include an emoji at the beginning.",
-        },
-        {
-          role: "user",
-          content: `Example User Input:\n"Tomorrow I need to finish the hackathon project, buy groceries, and then go for a run in the evening. Also, a quick meeting with the team at 10 AM."\n\nExample AI Suggestions Output:\n- ⏰ Consider time-blocking for your hackathon project to ensure focused work.\n- 🛒 Create a grocery list beforehand to save time and avoid impulse buys.\n- 🏃‍♂️ Schedule your run to avoid peak sun hours and stay hydrated.\n- 🤝 Prepare a brief agenda for your team meeting to keep it efficient.\n\nNow, provide suggestions for the following user input:\nUser Input:\n"${userDailyPlan}"\n\nAI Suggestions Output:\n`,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 300,
+    // Use same model as plan generation to avoid rate limits
+    // (Can upgrade to larger model when traffic is lower)
+    const coachModel = currentModel;
+
+    const startTime = Date.now();
+
+    // Build the prompt based on whether we have a schedule or not
+    let userContent;
+
+    if (generatedSchedule && generatedSchedule.length > 0) {
+      // SCHEDULE-AWARE COACHING: Analyze the actual schedule
+      const scheduleText = generatedSchedule
+        .map((task) => `${task.time} - ${task.task} (${task.duration})`)
+        .join("\n");
+
+      userContent = `You are an AI productivity coach analyzing a daily schedule. Review the schedule carefully and provide specific, actionable suggestions.
+
+Original User Request:
+"${userDailyPlan}"
+
+Generated Schedule:
+${scheduleText}
+
+Analyze this schedule and provide coaching in these categories (use these exact emoji headers):
+
+✅ What's Working Well:
+- Identify 2-3 positive aspects (e.g., good timing, energy alignment, priorities)
+
+⚠️ Potential Issues:
+- Find any problems: missing breaks, no lunch, back-to-back meetings, time conflicts, unrealistic durations, energy mismatches
+
+💡 Specific Improvements:
+- Suggest concrete changes with exact times (e.g., "Add 15-min break at 12:00 PM", "Move X to Y time")
+
+🧠 Energy & Focus Tips:
+- Comment on task timing relative to typical energy levels (morning = peak focus, afternoon = post-lunch dip, evening = wind-down)
+
+Keep suggestions specific to THIS schedule. Format as bullet points with emojis.`;
+    } else {
+      // FALLBACK: Generic suggestions if no schedule available
+      userContent = `You are an AI productivity coach. The user wants to plan their day with these activities:
+
+"${userDailyPlan}"
+
+Provide helpful suggestions in these categories:
+
+✅ Planning Tips:
+- General advice for organizing these activities
+
+💡 Productivity Suggestions:
+- Specific tips for each activity mentioned
+
+🧠 Energy Management:
+- When to schedule different types of activities
+
+Format as bullet points with emojis at the start of each point.`;
+    }
+
+    // Wrap API call with retry logic
+    const chatCompletion = await retryWithBackoff(async () => {
+      return await client.chat.completions.create({
+        model: coachModel,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an expert AI productivity coach specializing in schedule optimization and energy management. Provide specific, actionable advice based on actual schedule data.",
+          },
+          {
+            role: "user",
+            content: userContent,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 600, // Increased for more detailed coaching
+      });
     });
 
     const suggestions = chatCompletion.choices[0].message.content;
+    const endTime = Date.now();
+    const latency = endTime - startTime;
 
     if (!suggestions) {
       throw new Error("Failed to generate suggestions from Cerebras Llama.");
     }
 
-    res.json({ success: true, suggestions: suggestions });
+    console.log(`Coaching generated using ${coachModel} in ${latency}ms`);
+
+    res.json({
+      success: true,
+      suggestions: suggestions,
+      metadata: {
+        model: coachModel,
+        latency: latency,
+        scheduleAware: !!generatedSchedule,
+      },
+    });
   } catch (error) {
     console.error("Error generating AI suggestions:", error);
-    res.status(500).json({
+
+    // Provide user-friendly error messages
+    const isRateLimit =
+      error.status === 429 ||
+      (error.error && error.error.type === "too_many_requests_error");
+
+    const userMessage = isRateLimit
+      ? "Cerebras is experiencing high traffic. Please try again in a moment."
+      : error.message || "Failed to generate AI suggestions.";
+
+    res.status(isRateLimit ? 429 : 500).json({
       success: false,
-      error: error.message || "Failed to generate AI suggestions.",
+      error: userMessage,
+      retryable: isRateLimit,
     });
   }
 });
@@ -261,38 +442,117 @@ app.post("/generate-plan", async (req, res) => {
   }
 
   try {
-    const chatCompletion = await client.chat.completions.create({
-      model: "llama-4-scout-17b-16e-instruct", // Or choose an appropriate Llama model from Cerebras
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an AI assistant specialized in creating efficient daily plans.",
-        },
-        {
-          role: "user",
-          content: `A user will provide their daily plan in plain human language. Your task is to transform this into a structured, actionable AI plan.\n\nExample User Input:\n"Tomorrow I need to finish the hackathon project, buy groceries, and then go for a run in the evening. Also, a quick meeting with the team at 10 AM."\n\nExample AI Plan Output(follow this syntax ):\n1. **08:00 AM - 09:00 AM**: Review hackathon project progress and outline remaining tasks.\n2. **09:00 AM - 10:00 AM**: Work on hackathon project - implement feature X.\n3. **10:00 AM - 10:30 AM**: Team meeting (virtual).\n4. **10:30 AM - 01:00 PM**: Continue working on hackathon project - debug and refine feature Y.\n5. **01:00 PM - 02:00 PM**: Lunch break.\n6. **02:00 PM - 03:00 PM**: Go grocery shopping.\n7. **03:00 PM - 05:00 PM**: Finalize hackathon project documentation and prepare for demo.\n8. **05:00 PM - 06:00 PM**: Go for an evening run.\n9. **06:00 PM onwards**: Free time / Dinner.\n\nNow, generate an AI plan for the following user input:\nUser Input:\n"${userDailyPlan}"\n\nAI Plan Output:\n`,
-        },
-      ],
-      // Add other parameters as needed, e.g., temperature, max_tokens
-      temperature: 0.7,
-      max_tokens: 1000, // Increased to allow for longer responses
+    const startTime = Date.now();
+
+    // Wrap API call with retry logic
+    const chatCompletion = await retryWithBackoff(async () => {
+      return await client.chat.completions.create({
+        model: currentModel, // Use the currently selected model
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an AI assistant specialized in creating efficient daily plans.",
+          },
+          {
+            role: "user",
+            content: `A user will provide their daily plan in plain human language. Your task is to transform this into a structured, actionable AI plan.\n\nExample User Input:\n"Tomorrow I need to finish the hackathon project, buy groceries, and then go for a run in the evening. Also, a quick meeting with the team at 10 AM."\n\nExample AI Plan Output(follow this syntax ):\n1. **08:00 AM - 09:00 AM**: Review hackathon project progress and outline remaining tasks.\n2. **09:00 AM - 10:00 AM**: Work on hackathon project - implement feature X.\n3. **10:00 AM - 10:30 AM**: Team meeting (virtual).\n4. **10:30 AM - 01:00 PM**: Continue working on hackathon project - debug and refine feature Y.\n5. **01:00 PM - 02:00 PM**: Lunch break.\n6. **02:00 PM - 03:00 PM**: Go grocery shopping.\n7. **03:00 PM - 05:00 PM**: Finalize hackathon project documentation and prepare for demo.\n8. **05:00 PM - 06:00 PM**: Go for an evening run.\n9. **06:00 PM onwards**: Free time / Dinner.\n\nNow, generate an AI plan for the following user input:\nUser Input:\n"${userDailyPlan}"\n\nAI Plan Output:\n`,
+          },
+        ],
+        // Add other parameters as needed, e.g., temperature, max_tokens
+        temperature: 0.7,
+        max_tokens: 1000, // Increased to allow for longer responses
+      });
     });
 
     const aiPlan = chatCompletion.choices[0].message.content;
+    const endTime = Date.now();
+    const latency = endTime - startTime;
 
     if (!aiPlan) {
       throw new Error("Failed to generate plan from Cerebras API.");
     }
 
-    res.json({ success: true, aiPlan: aiPlan });
+    console.log(`Plan generated using ${currentModel} in ${latency}ms`);
+
+    res.json({
+      success: true,
+      aiPlan: aiPlan,
+      metadata: {
+        model: currentModel,
+        latency: latency,
+        tokensUsed: chatCompletion.usage || null,
+      },
+    });
   } catch (error) {
     console.error("Error generating AI plan:", error);
-    res.status(500).json({
+
+    // Provide user-friendly error messages
+    const isRateLimit =
+      error.status === 429 ||
+      (error.error && error.error.type === "too_many_requests_error");
+
+    const userMessage = isRateLimit
+      ? "Cerebras is experiencing high traffic. Please try again in a moment."
+      : error.message || "Failed to generate AI plan.";
+
+    res.status(isRateLimit ? 429 : 500).json({
       success: false,
-      error: error.message || "Failed to generate AI plan.",
+      error: userMessage,
+      retryable: isRateLimit,
     });
   }
+});
+
+// Get available models
+app.get("/api/models", (req, res) => {
+  res.json({
+    success: true,
+    models: AVAILABLE_MODELS,
+    currentModel: currentModel,
+  });
+});
+
+// Set current model
+app.post("/api/models/set", (req, res) => {
+  const { modelId } = req.body;
+
+  if (!modelId) {
+    return res.status(400).json({
+      success: false,
+      error: "modelId is required",
+    });
+  }
+
+  const model = AVAILABLE_MODELS.find((m) => m.id === modelId);
+  if (!model) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid model ID",
+    });
+  }
+
+  currentModel = modelId;
+
+  // Persist the model selection to database
+  const saved = setSetting("currentModel", modelId);
+
+  if (saved) {
+    console.log(
+      `Model switched to: ${model.name} (${modelId}) - Saved to database`
+    );
+  } else {
+    console.warn(
+      `Model switched to: ${model.name} (${modelId}) - Failed to save to database`
+    );
+  }
+
+  res.json({
+    success: true,
+    message: `Model set to ${model.name}`,
+    currentModel: currentModel,
+    persisted: saved,
+  });
 });
 
 // Export all schedules as JSON
