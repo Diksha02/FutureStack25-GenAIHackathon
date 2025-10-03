@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TaskPilot - Focus Mode</title>
-    <link rel="stylesheet" href="./css/focus.css">
+    <link rel="stylesheet" href="./css/focus.css" />
   </head>
   <body>
     <a href="today.html" class="back-btn">← Back</a>
@@ -30,11 +30,9 @@
 
         <div class="controls">
           <button class="btn-start" id="startBtn" onclick="toggleTimer()">
-            <span>▶️</span>
             <span>Start</span>
           </button>
           <button class="btn-reset" onclick="resetTimer()">
-            <span>↺</span>
             <span>Reset</span>
           </button>
         </div>
@@ -89,6 +87,16 @@
         if (focusTask) {
           const task = JSON.parse(focusTask);
           document.getElementById("taskName").textContent = task.task;
+        }
+
+        // Pull settings (durations, autoBreak)
+        const settings = JSON.parse(localStorage.getItem("settings") || "{}");
+        if (
+          typeof settings.focusDuration === "number" &&
+          settings.focusDuration > 0
+        ) {
+          totalTime = settings.focusDuration * 60;
+          timeLeft = totalTime;
         }
       }
 
@@ -203,30 +211,57 @@
           saveStats();
           updateStatsDisplay();
 
-          showNotification(
-            "Session Complete!",
-            "Great work! Time for a 5-minute break."
-          );
-          playSound();
+          // Respect settings: notifications, sounds, break duration, auto-start
+          const settings = JSON.parse(localStorage.getItem("settings") || "{}");
+          const breakMinutes = Number(settings.breakDuration) || 5;
+          const allowNotif = settings.notifications !== false;
+          const allowSound = settings.sounds !== false;
+          const autoBreak = settings.autoBreak === true;
+
+          if (allowNotif) {
+            showNotification(
+              "Session Complete!",
+              `Great work! Time for a ${breakMinutes}-minute break.`
+            );
+          }
+          if (allowSound) {
+            playSound();
+          }
 
           // Start break
           isBreak = true;
-          totalTime = 5 * 60;
+          totalTime = breakMinutes * 60;
           timeLeft = totalTime;
           document.getElementById("timerDisplay").classList.remove("active");
           document.getElementById("timerDisplay").classList.add("break");
           document.getElementById("timerLabel").textContent = "Break Time! 😌";
           updateDisplay();
+
+          // Auto-start break if enabled
+          if (autoBreak) {
+            startTimer();
+          }
         } else {
           // Completed break
-          showNotification(
-            "Break Complete!",
-            "Ready for another focus session?"
-          );
-          playSound();
+          const settings = JSON.parse(localStorage.getItem("settings") || "{}");
+          const allowNotif = settings.notifications !== false;
+          const allowSound = settings.sounds !== false;
+          if (allowNotif) {
+            showNotification(
+              "Break Complete!",
+              "Ready for another focus session?"
+            );
+          }
+          if (allowSound) {
+            playSound();
+          }
 
           isBreak = false;
           totalTime = 25 * 60;
+          const focusMinutes = Number(settings.focusDuration);
+          if (Number.isFinite(focusMinutes) && focusMinutes > 0) {
+            totalTime = focusMinutes * 60;
+          }
           timeLeft = totalTime;
           document.getElementById("timerDisplay").classList.remove("break");
           document.getElementById("timerLabel").textContent = "Ready to focus?";
@@ -250,11 +285,15 @@
           notif.classList.remove("show");
         }, 5000);
 
-        // Browser notification
-        if ("Notification" in window && Notification.permission === "granted") {
+        // Browser notification (also gated by settings)
+        const settings = JSON.parse(localStorage.getItem("settings") || "{}");
+        if (
+          settings.notifications !== false &&
+          "Notification" in window &&
+          Notification.permission === "granted"
+        ) {
           new Notification("TaskPilot - " + title, {
             body: message,
-            icon: "🏆",
           });
         }
       }

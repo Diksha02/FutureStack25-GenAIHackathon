@@ -24,7 +24,7 @@
 
       <div class="main-content">
         <div class="card input-section">
-          <h2>📝 What's on your mind today?</h2>
+          <h2>What's on your mind today?</h2>
           <textarea
             id="planInput"
             placeholder="Write your day in plain language...
@@ -34,39 +34,37 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
           ></textarea>
           <div class="button-group">
             <button class="btn-primary" onclick="generatePlan()">
-              <span>✨</span>
               <span>Generate AI Plan</span>
             </button>
             <button class="btn-secondary" onclick="clearInput()">
-              <span>🗑️</span>
               <span>Clear</span>
             </button>
           </div>
         </div>
 
         <div class="card">
-          <h2>💡 AI Suggestions</h2>
+          <h2>AI Suggestions</h2>
           <div class="loading" id="suggestionsLoading">
             <div class="spinner"></div>
-            <p>Meta Llama is thinking...</p>
+            <p>Generating suggestions...</p>
           </div>
           <div id="suggestionsContent">
             <div class="empty-state">
-              <div class="empty-state-icon">🤖</div>
+              <div class="empty-state-icon"></div>
               <p>AI coaching suggestions will appear here</p>
             </div>
           </div>
         </div>
 
         <div class="card">
-          <h2>📅 Structured Schedule</h2>
+          <h2>Structured Schedule</h2>
           <div class="loading" id="scheduleLoading">
             <div class="spinner"></div>
-            <p>Cerebras is building your schedule...</p>
+            <p>Building your schedule...</p>
           </div>
           <div id="scheduleContent">
             <div class="empty-state">
-              <div class="empty-state-icon">📋</div>
+              <div class="empty-state-icon"></div>
               <p>Your structured schedule will appear here</p>
             </div>
           </div>

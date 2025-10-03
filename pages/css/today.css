@@ -1,3 +1,119 @@
+.card,
+header,
+.task-item,
+.today-schedule-item,
+.btn-white,
+.quick-btn {
+  transition: background-color 0.2s ease, color 0.2s ease,
+    border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.card:hover {
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+  transform: translateY(-1px);
+}
+/* --- Warm pastel light theme overrides --- */
+body {
+  background: #fff8f2;
+  color: #2b2d31;
+}
+header {
+  background: #ffffff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+}
+.logo h1 {
+  color: #2b2d31;
+}
+nav a {
+  color: #5f6368;
+  border-bottom: 2px solid transparent;
+  padding: 8px 2px;
+  border-radius: 0;
+}
+nav a:hover,
+nav a.active {
+  color: #2b2d31;
+  background: transparent;
+  border-bottom-color: #ff8fab;
+}
+.current-task {
+  background: linear-gradient(180deg, #ffe5ec 0%, #fff8f2 100%);
+  color: #2b2d31;
+}
+.btn-white {
+  background: #fff;
+  color: #2b2d31;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+.btn-white:hover {
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+.card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+.card h2 {
+  color: #2b2d31;
+}
+.task-item {
+  background: #fff7f0;
+}
+.task-item:hover {
+  background: #fff1e6;
+}
+.checkbox {
+  border-color: rgba(0, 0, 0, 0.15);
+}
+.checkbox:hover {
+  border-color: #ff8fab;
+}
+.checkbox.checked {
+  background: #ff8fab;
+  border-color: #ff8fab;
+  color: #fff;
+}
+.task-time {
+  color: #6b7280;
+}
+.task-duration {
+  color: #6b7280;
+}
+.stat-card {
+  background: #fff7f0;
+}
+.stat-value {
+  color: #ff8fab;
+}
+.progress-bar {
+  background: rgba(0, 0, 0, 0.08);
+}
+.progress-fill {
+  background: #ff8fab;
+}
+.quick-btn {
+  background: #fff7f0;
+}
+.quick-btn:hover {
+  background: #fff1e6;
+  color: #2b2d31;
+}
+.empty-state {
+  color: #6b7280;
+}
+.today-schedule-item {
+  background: #fff7f0;
+  border-color: transparent;
+}
+.today-schedule-item:hover {
+  background: #fff1e6;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.today-schedule-item .dot {
+  background: #ff8fab;
+}
+.today-schedule-item .save-time {
+  color: #6b7280;
+}
 * {
   margin: 0;
   padding: 0;
@@ -373,4 +489,216 @@ button {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* --- Professional dark theme overrides (Focus Buddy inspired) --- */
+body {
+  background: #0f1115;
+  color: #e6e7eb;
+}
+header {
+  background: #111318;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.logo h1 {
+  color: #e6e7eb;
+  -webkit-text-fill-color: initial;
+  background: none;
+}
+.logo-icon {
+  display: none;
+}
+nav a {
+  color: #aeb3c2;
+  padding: 8px 2px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s ease;
+}
+nav a:hover,
+nav a.active {
+  color: #e6e7eb;
+  background: transparent;
+  border-bottom-color: #6b5cff;
+}
+.current-task {
+  background: #151821;
+  color: #e6e7eb;
+}
+.btn-white {
+  background: #0b0c10;
+  color: #e6e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.btn-white:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.card {
+  background: #111318;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.card h2 {
+  color: #e6e7eb;
+}
+.task-item {
+  background: #0b0c10;
+}
+.task-item:hover {
+  background: #13151b;
+}
+.checkbox {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.checkbox:hover {
+  border-color: #6b5cff;
+}
+.checkbox.checked {
+  background: #6b5cff;
+  border-color: #6b5cff;
+}
+.task-time {
+  color: #c3c5d1;
+}
+.task-duration {
+  color: #aeb3c2;
+}
+.stat-card {
+  background: #0b0c10;
+}
+.stat-value {
+  color: #6b5cff;
+}
+.progress-bar {
+  background: rgba(255, 255, 255, 0.08);
+}
+.progress-fill {
+  background: #6b5cff;
+}
+.quick-btn {
+  background: #0b0c10;
+}
+.quick-btn:hover {
+  background: #151821;
+  color: #e6e7eb;
+}
+.empty-state {
+  color: #aeb3c2;
+}
+.empty-state-icon {
+  display: none;
+}
+.today-schedule-item {
+  background: #0b0c10;
+  border-color: transparent;
+}
+.today-schedule-item:hover {
+  background: #13151b;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.today-schedule-item .dot {
+  background: #6b5cff;
+}
+.today-schedule-item .save-time {
+  color: #aeb3c2;
+}
+
+/* --- Warm pastel light theme overrides (calm & inviting) --- */
+body {
+  background: #faf7f2;
+  color: #2b2d31;
+}
+header {
+  background: #ffffff;
+  box-shadow: 0 6px 24px rgba(16, 24, 40, 0.06);
+}
+.logo h1 {
+  color: #2b2d31;
+}
+nav a {
+  color: #667085;
+}
+nav a:hover,
+nav a.active {
+  color: #2b2d31;
+  border-bottom-color: #8b7cf6;
+  background: transparent;
+}
+.current-task {
+  background: #f3f0ff;
+  color: #2b2d31;
+}
+.btn-white {
+  background: #f2f4f7;
+  color: #2b2d31;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+}
+.btn-white:hover {
+  background: #eaecf0;
+}
+.card {
+  background: #ffffff;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  box-shadow: 0 4px 16px rgba(16, 24, 40, 0.06);
+}
+.card h2 {
+  color: #2b2d31;
+}
+.task-item {
+  background: #f8fafc;
+}
+.task-item:hover {
+  background: #eef2f6;
+}
+.checkbox {
+  border-color: #d0d5dd;
+}
+.checkbox:hover {
+  border-color: #8b7cf6;
+}
+.checkbox.checked {
+  background: #8b7cf6;
+  border-color: #8b7cf6;
+}
+.task-time {
+  color: #344054;
+}
+.task-duration {
+  color: #667085;
+}
+.stat-card {
+  background: #f9fafb;
+}
+.stat-value {
+  color: #8b7cf6;
+}
+.progress-bar {
+  background: #eaecf0;
+}
+.progress-fill {
+  background: #8b7cf6;
+}
+.quick-btn {
+  background: #f8fafc;
+}
+.quick-btn:hover {
+  background: #eef2f6;
+  color: #2b2d31;
+}
+.empty-state {
+  color: #667085;
+}
+.today-schedule-item {
+  background: #f8fafc;
+  border-color: transparent;
+}
+.today-schedule-item:hover {
+  background: #eef2f6;
+  border-color: #eaecf0;
+}
+.today-schedule-item .dot {
+  background: #8b7cf6;
+}
+.today-schedule-item .save-time {
+  color: #667085;
 }
