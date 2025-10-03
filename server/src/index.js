@@ -295,7 +295,90 @@ app.post("/generate-plan", async (req, res) => {
   }
 });
 
-// 404 handler
+// Export all schedules as JSON
+app.get("/export-schedules", async (req, res) => {
+  try {
+    const schedules = getAllSchedules();
+    const exportData = {
+      version: "1.0",
+      exportDate: new Date().toISOString(),
+      totalSchedules: schedules.length,
+      schedules: schedules,
+    };
+
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="taskpilot-backup-${
+        new Date().toISOString().split("T")[0]
+      }.json"`
+    );
+    res.json(exportData);
+    console.log(`📦 Exported ${schedules.length} schedules`);
+  } catch (error) {
+    console.error("Error exporting data:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to export data.",
+    });
+  }
+});
+
+// Import schedules from JSON
+app.post("/import-schedules", async (req, res) => {
+  try {
+    const { schedules, replaceExisting } = req.body;
+
+    if (!schedules || !Array.isArray(schedules)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid data format. Expected schedules array.",
+      });
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    // If replaceExisting, we could clear the database first
+    // For now, we'll just add new schedules
+
+    schedules.forEach((schedule) => {
+      try {
+        const planJson =
+          typeof schedule.plan === "string"
+            ? schedule.plan
+            : JSON.stringify(schedule.plan);
+        saveScheduleToDb(
+          schedule.date,
+          planJson,
+          schedule.prompt || "",
+          schedule.created_at ||
+            new Date().toISOString().replace("T", " ").substring(0, 19)
+        );
+        imported++;
+      } catch (err) {
+        console.error(`Failed to import schedule for ${schedule.date}:`, err);
+        skipped++;
+      }
+    });
+
+    console.log(`📥 Imported ${imported} schedules, skipped ${skipped}`);
+    res.json({
+      success: true,
+      imported,
+      skipped,
+      message: `Successfully imported ${imported} schedule(s)`,
+    });
+  } catch (error) {
+    console.error("Error importing data:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to import data.",
+    });
+  }
+});
+
+// 404 handler - must be AFTER all routes
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -306,7 +389,7 @@ app.use((req, res) => {
   });
 });
 
-// Error handler
+// Error handler - must be last
 app.use((err, req, res, next) => {
   console.error("Error:", err);
 

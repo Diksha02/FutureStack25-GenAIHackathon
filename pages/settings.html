@@ -257,38 +257,58 @@
 
         // Load settings
         const settings = JSON.parse(localStorage.getItem("settings") || "{}");
-        if (settings.timezone)
-          document.getElementById("timezone").value = settings.timezone;
-        if (settings.theme)
-          document.getElementById("theme").value = settings.theme;
-        if (settings.focusDuration)
-          document.getElementById("focusDuration").value =
-            settings.focusDuration;
-        if (settings.breakDuration)
-          document.getElementById("breakDuration").value =
-            settings.breakDuration;
 
-        document.getElementById("notifications").checked =
-          settings.notifications !== false;
-        document.getElementById("sounds").checked = settings.sounds !== false;
-        document.getElementById("autoBreak").checked =
-          settings.autoBreak === true;
+        // Only set values for elements that exist
+        const timezone = document.getElementById("timezone");
+        if (timezone && settings.timezone) timezone.value = settings.timezone;
+
+        const theme = document.getElementById("theme");
+        if (theme && settings.theme) theme.value = settings.theme;
+
+        const focusDuration = document.getElementById("focusDuration");
+        if (focusDuration && settings.focusDuration)
+          focusDuration.value = settings.focusDuration;
+
+        const breakDuration = document.getElementById("breakDuration");
+        if (breakDuration && settings.breakDuration)
+          breakDuration.value = settings.breakDuration;
+
+        const notifications = document.getElementById("notifications");
+        if (notifications)
+          notifications.checked = settings.notifications !== false;
+
+        const sounds = document.getElementById("sounds");
+        if (sounds) sounds.checked = settings.sounds !== false;
+
+        const autoBreak = document.getElementById("autoBreak");
+        if (autoBreak) autoBreak.checked = settings.autoBreak === true;
       }
 
       function saveSettings() {
-        const settings = {
-          timezone: document.getElementById("timezone").value,
-          theme: document.getElementById("theme").value,
-          notifications: document.getElementById("notifications").checked,
-          sounds: document.getElementById("sounds").checked,
-          focusDuration: parseInt(
-            document.getElementById("focusDuration").value
-          ),
-          breakDuration: parseInt(
-            document.getElementById("breakDuration").value
-          ),
-          autoBreak: document.getElementById("autoBreak").checked,
-        };
+        const settings = {};
+
+        const timezone = document.getElementById("timezone");
+        if (timezone) settings.timezone = timezone.value;
+
+        const theme = document.getElementById("theme");
+        if (theme) settings.theme = theme.value;
+
+        const notifications = document.getElementById("notifications");
+        if (notifications) settings.notifications = notifications.checked;
+
+        const sounds = document.getElementById("sounds");
+        if (sounds) settings.sounds = sounds.checked;
+
+        const focusDuration = document.getElementById("focusDuration");
+        if (focusDuration)
+          settings.focusDuration = parseInt(focusDuration.value);
+
+        const breakDuration = document.getElementById("breakDuration");
+        if (breakDuration)
+          settings.breakDuration = parseInt(breakDuration.value);
+
+        const autoBreak = document.getElementById("autoBreak");
+        if (autoBreak) settings.autoBreak = autoBreak.checked;
 
         localStorage.setItem("settings", JSON.stringify(settings));
         showAlert("success");
@@ -358,62 +378,139 @@
         }
       }
 
-      function exportData() {
-        const data = {
-          schedule: JSON.parse(localStorage.getItem("todaySchedule") || "[]"),
-          completedTasks: JSON.parse(
-            localStorage.getItem("completedTasks") || "[]"
-          ),
-          focusStats: JSON.parse(localStorage.getItem("focusStats") || "{}"),
-          settings: JSON.parse(localStorage.getItem("settings") || "{}"),
-          exportDate: new Date().toISOString(),
-        };
+      async function exportData() {
+        try {
+          console.log("Starting export...");
+          console.log("Fetching from: /export-schedules");
 
-        const blob = new Blob([JSON.stringify(data, null, 2)], {
-          type: "application/json",
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `taskpilot-backup-${
-          new Date().toISOString().split("T")[0]
-        }.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+          // Fetch all schedules from backend
+          const response = await fetch("/export-schedules");
+          console.log("Response status:", response.status);
+          console.log("Response headers:", [...response.headers.entries()]);
 
-        showAlert("success");
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Export failed with status:", response.status);
+            console.error("Error response:", errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+          }
+
+          const data = await response.json();
+          console.log("Export data received:", data);
+          console.log(`Total schedules: ${data.totalSchedules}`);
+
+          // Create downloadable file
+          const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: "application/json",
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `taskpilot-backup-${
+            new Date().toISOString().split("T")[0]
+          }.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          showAlert("success");
+          alert(`Exported ${data.totalSchedules} schedule(s) successfully!`);
+          console.log(
+            `Export completed successfully - ${data.totalSchedules} schedules`
+          );
+        } catch (error) {
+          console.error("Export failed:", error);
+          console.error("Error details:", error.stack);
+          console.error("Error message:", error.message);
+          alert(
+            `Export failed: ${error.message}\n\nCheck console for details.`
+          );
+          showAlert("error");
+        }
       }
 
-      function importData() {
+      async function importData() {
         const file = document.getElementById("importFile").files[0];
         if (!file) return;
 
+        console.log("Starting import...");
+        console.log("File name:", file.name);
+        console.log("File size:", file.size, "bytes");
+
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           try {
+            console.log("File loaded, parsing JSON...");
             const data = JSON.parse(e.target.result);
+            console.log("Parsed data:", data);
 
-            if (data.schedule)
-              localStorage.setItem(
-                "todaySchedule",
-                JSON.stringify(data.schedule)
+            // Validate data format
+            if (!data.schedules || !Array.isArray(data.schedules)) {
+              console.error("Invalid data format:", data);
+              alert(
+                "Invalid backup file format. Expected a TaskPilot backup with schedules array."
               );
-            if (data.completedTasks)
-              localStorage.setItem(
-                "completedTasks",
-                JSON.stringify(data.completedTasks)
-              );
-            if (data.focusStats)
-              localStorage.setItem(
-                "focusStats",
-                JSON.stringify(data.focusStats)
-              );
-            if (data.settings)
-              localStorage.setItem("settings", JSON.stringify(data.settings));
+              showAlert("error");
+              return;
+            }
 
-            loadSettings();
-            showAlert("success");
+            console.log(
+              `Valid backup file with ${data.schedules.length} schedules`
+            );
+            console.log("Export date:", data.exportDate || "Unknown");
+
+            // Confirm import
+            const confirmMsg = `Found ${
+              data.schedules.length
+            } schedule(s) in backup file.\n\nImport date: ${
+              data.exportDate || "Unknown"
+            }\n\nThis will ADD these schedules to your existing data. Continue?`;
+            if (!confirm(confirmMsg)) {
+              console.log("Import cancelled by user");
+              return;
+            }
+
+            console.log("Sending to backend: /import-schedules");
+            // Send to backend
+            const response = await fetch("/import-schedules", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                schedules: data.schedules,
+                replaceExisting: false,
+              }),
+            });
+
+            console.log("Response status:", response.status);
+            console.log("Response headers:", [...response.headers.entries()]);
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error("Import failed with status:", response.status);
+              console.error("Error response:", errorText);
+              throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const result = await response.json();
+            console.log("Import response:", result);
+
+            if (result.success) {
+              console.log(
+                `Import successful - Imported: ${result.imported}, Skipped: ${result.skipped}`
+              );
+              alert(
+                `${result.message}\n\nImported: ${result.imported}\nSkipped: ${result.skipped}`
+              );
+              showAlert("success");
+            } else {
+              throw new Error(result.error || "Import failed");
+            }
           } catch (error) {
+            console.error("Import failed:", error);
+            console.error("Error details:", error.stack);
+            console.error("Error message:", error.message);
+            alert("Failed to import data: " + error.message);
             showAlert("error");
           }
         };
