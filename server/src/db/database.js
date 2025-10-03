@@ -22,14 +22,17 @@ const initDb = () => {
       plan TEXT NOT NULL
     );
   `);
-  // Detect and optionally add created_at and prompt
+  // Detect and add columns if missing
   try {
     const cols = db.prepare("PRAGMA table_info(schedules)").all();
     createdAtAvailable = cols.some((c) => c.name === "created_at");
     promptAvailable = cols.some((c) => c.name === "prompt");
     if (!createdAtAvailable) {
+      // Add column without NOT NULL to maximize compatibility
+      db.exec("ALTER TABLE schedules ADD COLUMN created_at TEXT");
+      // Backfill existing rows with current UTC timestamp
       db.exec(
-        "ALTER TABLE schedules ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))"
+        "UPDATE schedules SET created_at = datetime('now') WHERE created_at IS NULL"
       );
       createdAtAvailable = true;
     }
@@ -38,7 +41,7 @@ const initDb = () => {
       promptAvailable = true;
     }
   } catch (_) {
-    // If ALTER fails (older SQLite), re-detect gracefully
+    // Re-detect gracefully
     const cols2 = db.prepare("PRAGMA table_info(schedules)").all();
     createdAtAvailable = cols2.some((c) => c.name === "created_at");
     promptAvailable = cols2.some((c) => c.name === "prompt");
@@ -54,19 +57,41 @@ const safeParsePlan = (planText) => {
   }
 };
 
-// Function to save a schedule
+// Function to save a schedule (explicitly sets created_at when available)
 const saveScheduleToDb = (date, plan, prompt) => {
-  if (promptAvailable) {
+  // Local timestamp "YYYY-MM-DD HH:MM:SS"
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  const createdAt = `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+  if (createdAtAvailable && promptAvailable) {
+    const stmt = db.prepare(
+      "INSERT INTO schedules (date, plan, prompt, created_at) VALUES (?, ?, ?, ?)"
+    );
+    const info = stmt.run(date, plan, prompt || null, createdAt);
+    return info.lastInsertRowid;
+  }
+  if (createdAtAvailable && !promptAvailable) {
+    const stmt = db.prepare(
+      "INSERT INTO schedules (date, plan, created_at) VALUES (?, ?, ?)"
+    );
+    const info = stmt.run(date, plan, createdAt);
+    return info.lastInsertRowid;
+  }
+  if (!createdAtAvailable && promptAvailable) {
     const stmt = db.prepare(
       "INSERT INTO schedules (date, plan, prompt) VALUES (?, ?, ?)"
     );
     const info = stmt.run(date, plan, prompt || null);
     return info.lastInsertRowid;
-  } else {
-    const stmt = db.prepare("INSERT INTO schedules (date, plan) VALUES (?, ?)");
-    const info = stmt.run(date, plan);
-    return info.lastInsertRowid;
   }
+  const stmt = db.prepare("INSERT INTO schedules (date, plan) VALUES (?, ?)");
+  const info = stmt.run(date, plan);
+  return info.lastInsertRowid;
 };
 
 // Function to get a schedule by date (latest by id)

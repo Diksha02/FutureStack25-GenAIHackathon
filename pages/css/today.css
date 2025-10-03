@@ -311,6 +311,8 @@ button {
 .today-schedule-item {
   display: grid;
   grid-template-columns: 10px 1fr auto;
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
@@ -318,6 +320,16 @@ button {
   border-radius: 8px;
   cursor: pointer;
   border: 2px solid transparent;
+}
+
+/* Ensure small, content-width buttons inside schedule items */
+.today-schedule-item .btn-white {
+  display: inline-flex;
+  width: auto;
+  padding: 6px 10px;
+  line-height: 1;
+  white-space: nowrap;
+  justify-self: end;
 }
 
 .today-schedule-item:hover {

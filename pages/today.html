@@ -288,16 +288,12 @@
               return `
                 <div class="today-schedule-item" title="${
                   s.date
-                } • ${promptText}">
+                } • ${promptText}" onclick="setActiveSchedule('${encodeURIComponent(
+                JSON.stringify(s.plan)
+              )}')">
                   <span class="dot"></span>
                   <span class="line-clamp">${s.date} • ${promptText}</span>
                   <span class="save-time">${savedTime}</span>
-                  <button class="btn-white" onclick="setActiveSchedule(${encodeURIComponent(
-                    JSON.stringify(s.plan)
-                  ).replace(
-                    /"/g,
-                    "&quot;"
-                  )}); event.stopPropagation();">Use</button>
                   <button class="btn-white" onclick="deleteSchedule(${
                     s.id
                   }); event.stopPropagation();">Delete</button>
@@ -315,13 +311,29 @@
 
       function formatTime(ts) {
         try {
-          const d = new Date(ts);
-          return d.toLocaleTimeString([], {
+          if (
+            typeof ts === "string" &&
+            /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts)
+          ) {
+            // Treat as LOCAL time string now stored by the server
+            const isoLocal = ts.replace(" ", "T");
+            return new Date(isoLocal).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          }
+          if (typeof ts === "number") {
+            return new Date(ts).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          }
+          return new Date(ts).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
           });
-        } catch (_) {
-          return ts;
+        } catch (e) {
+          return "";
         }
       }
 
@@ -352,16 +364,26 @@
                 .map((it) => `${it.time} ${it.task}`)
                 .join(" • ");
               const promptText = s.prompt ? s.prompt : preview;
-              return `
-              <div class="today-schedule-item" onclick="setActiveSchedule(${encodeURIComponent(
+              const savedTime = (function f() {
+                try {
+                  const d = new Date(s.created_at || s.date);
+                  return d.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                } catch (_) {
+                  return "";
+                }
+              })();
+              const encoded = encodeURIComponent(
                 JSON.stringify(s.plan)
-              ).replace(/"/g, "&quot;")})" title="${promptText}">
+              ).replace(/'/g, "&#39;");
+              return `
+              <div class="today-schedule-item" onclick="setActiveSchedule('${encoded}')" title="${promptText}">
                 <span class="dot"></span>
                 <span class="line-clamp">${promptText}</span>
-                <span class="save-time">${formatTime(s.created_at)}</span>
-                <button class="btn-white" onclick="deleteSchedule(${
-                  s.id
-                }); event.stopPropagation();">Delete</button>
+                <span class="save-time">${savedTime}</span>
+                <button class="btn-white" onclick="deleteSchedule(${s.id}); event.stopPropagation();">Delete</button>
               </div>
             `;
             })
@@ -373,9 +395,15 @@
       }
 
       // Switch active schedule for today and re-render
-      function setActiveSchedule(planJson) {
+      function setActiveSchedule(planArg) {
         try {
-          schedule = planJson; // already an array of tasks
+          let nextSchedule = planArg;
+          if (typeof planArg === "string") {
+            // Decode from encodeURIComponent(JSON.stringify(...))
+            const decoded = decodeURIComponent(planArg);
+            nextSchedule = JSON.parse(decoded);
+          }
+          schedule = Array.isArray(nextSchedule) ? nextSchedule : [];
           // reset completed state when switching
           completedTasks = new Set();
           localStorage.removeItem("completedTasks");
@@ -402,7 +430,110 @@
       }
 
       function exportCalendar() {
-        alert("📅 Calendar export via Docker MCP Gateway");
+        if (!schedule || schedule.length === 0) {
+          alert("No schedule to export. Please generate a plan first.");
+          return;
+        }
+
+        try {
+          // Create iCalendar format
+          const now = new Date();
+          const today = now.toISOString().split("T")[0].replace(/-/g, "");
+          const timestamp =
+            now.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+
+          let icsContent = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//TaskPilot//Schedule Export//EN",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+            "X-WR-CALNAME:TaskPilot Schedule",
+            "X-WR-TIMEZONE:UTC",
+          ];
+
+          // Convert each task to a calendar event
+          schedule.forEach((task, index) => {
+            const taskTime = task.time || "09:00 AM";
+            const taskDuration = task.durationMinutes || 60;
+
+            // Parse time to get start datetime
+            const [timeVal, ampm] = taskTime.split(" ");
+            let [hours, minutes] = timeVal.split(":").map(Number);
+            if (ampm === "PM" && hours < 12) hours += 12;
+            if (ampm === "AM" && hours === 12) hours = 0;
+
+            const startDate = new Date(now);
+            startDate.setHours(hours, minutes || 0, 0, 0);
+
+            const endDate = new Date(startDate);
+            endDate.setMinutes(endDate.getMinutes() + taskDuration);
+
+            // Format dates for iCalendar (YYYYMMDDTHHMMSS)
+            const formatDateTime = (date) => {
+              const pad = (n) => String(n).padStart(2, "0");
+              return (
+                date.getFullYear() +
+                pad(date.getMonth() + 1) +
+                pad(date.getDate()) +
+                "T" +
+                pad(date.getHours()) +
+                pad(date.getMinutes()) +
+                pad(date.getSeconds())
+              );
+            };
+
+            const dtStart = formatDateTime(startDate);
+            const dtEnd = formatDateTime(endDate);
+
+            // Clean task description for calendar
+            const taskDescription = task.task
+              .replace(/\n/g, "\\n")
+              .replace(/,/g, "\\,");
+            const priority = task.priority || "medium";
+            const priorityMap = { high: 1, medium: 5, low: 9 };
+
+            icsContent.push(
+              "BEGIN:VEVENT",
+              `UID:taskpilot-${today}-${index}@taskpilot.app`,
+              `DTSTAMP:${timestamp}`,
+              `DTSTART:${dtStart}`,
+              `DTEND:${dtEnd}`,
+              `SUMMARY:${taskDescription}`,
+              `DESCRIPTION:Priority: ${priority}\\nDuration: ${taskDuration} minutes`,
+              `PRIORITY:${priorityMap[priority]}`,
+              `STATUS:CONFIRMED`,
+              `SEQUENCE:0`,
+              "END:VEVENT"
+            );
+          });
+
+          icsContent.push("END:VCALENDAR");
+
+          // Create downloadable file
+          const icsBlob = new Blob([icsContent.join("\r\n")], {
+            type: "text/calendar;charset=utf-8",
+          });
+
+          const downloadLink = document.createElement("a");
+          downloadLink.href = URL.createObjectURL(icsBlob);
+          downloadLink.download = `taskpilot-schedule-${today}.ics`;
+
+          // Trigger download
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+
+          // Clean up
+          URL.revokeObjectURL(downloadLink.href);
+
+          alert(
+            "✅ Calendar exported! Import the .ics file into Google Calendar, Outlook, or Apple Calendar."
+          );
+        } catch (error) {
+          console.error("Export error:", error);
+          alert("❌ Failed to export calendar. Please try again.");
+        }
       }
 
       loadSchedule();

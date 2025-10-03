@@ -337,6 +337,14 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
           return;
         }
 
+        // Fallback: capture prompt from textarea if not already set
+        if (!lastPromptText || lastPromptText.trim() === "") {
+          const inputNode = document.getElementById("planInput");
+          if (inputNode) {
+            lastPromptText = inputNode.value.trim();
+          }
+        }
+
         const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
         const planJson = JSON.stringify(currentSchedule); // Convert array of objects to JSON string
 
@@ -374,11 +382,110 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
       }
 
       function exportCalendar() {
-        // Simple ICS export
-        alert(
-          "📅 Calendar export would be handled by Docker MCP Gateway in production"
-        );
-        // In production, this would call the MCP tool to generate .ics file
+        if (!currentSchedule || currentSchedule.length === 0) {
+          alert("No schedule to export. Please generate a plan first.");
+          return;
+        }
+
+        try {
+          // Create iCalendar format
+          const now = new Date();
+          const today = now.toISOString().split("T")[0].replace(/-/g, "");
+          const timestamp =
+            now.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+
+          let icsContent = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//TaskPilot//Schedule Export//EN",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+            "X-WR-CALNAME:TaskPilot Schedule",
+            "X-WR-TIMEZONE:UTC",
+          ];
+
+          // Convert each task to a calendar event
+          currentSchedule.forEach((task, index) => {
+            const taskTime = task.time || "09:00 AM";
+            const taskDuration = task.durationMinutes || 60;
+
+            // Parse time to get start datetime
+            const [timeVal, ampm] = taskTime.split(" ");
+            let [hours, minutes] = timeVal.split(":").map(Number);
+            if (ampm === "PM" && hours < 12) hours += 12;
+            if (ampm === "AM" && hours === 12) hours = 0;
+
+            const startDate = new Date(now);
+            startDate.setHours(hours, minutes || 0, 0, 0);
+
+            const endDate = new Date(startDate);
+            endDate.setMinutes(endDate.getMinutes() + taskDuration);
+
+            // Format dates for iCalendar (YYYYMMDDTHHMMSS)
+            const formatDateTime = (date) => {
+              const pad = (n) => String(n).padStart(2, "0");
+              return (
+                date.getFullYear() +
+                pad(date.getMonth() + 1) +
+                pad(date.getDate()) +
+                "T" +
+                pad(date.getHours()) +
+                pad(date.getMinutes()) +
+                pad(date.getSeconds())
+              );
+            };
+
+            const dtStart = formatDateTime(startDate);
+            const dtEnd = formatDateTime(endDate);
+
+            // Clean task description for calendar
+            const taskDescription = task.task
+              .replace(/\n/g, "\\n")
+              .replace(/,/g, "\\,");
+            const priority = task.priority || "medium";
+            const priorityMap = { high: 1, medium: 5, low: 9 };
+
+            icsContent.push(
+              "BEGIN:VEVENT",
+              `UID:taskpilot-${today}-${index}@taskpilot.app`,
+              `DTSTAMP:${timestamp}`,
+              `DTSTART:${dtStart}`,
+              `DTEND:${dtEnd}`,
+              `SUMMARY:${taskDescription}`,
+              `DESCRIPTION:Priority: ${priority}\\nDuration: ${taskDuration} minutes`,
+              `PRIORITY:${priorityMap[priority]}`,
+              `STATUS:CONFIRMED`,
+              `SEQUENCE:0`,
+              "END:VEVENT"
+            );
+          });
+
+          icsContent.push("END:VCALENDAR");
+
+          // Create downloadable file
+          const icsBlob = new Blob([icsContent.join("\r\n")], {
+            type: "text/calendar;charset=utf-8",
+          });
+
+          const downloadLink = document.createElement("a");
+          downloadLink.href = URL.createObjectURL(icsBlob);
+          downloadLink.download = `taskpilot-schedule-${today}.ics`;
+
+          // Trigger download
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+
+          // Clean up
+          URL.revokeObjectURL(downloadLink.href);
+
+          alert(
+            "✅ Calendar exported! Import the .ics file into Google Calendar, Outlook, or Apple Calendar."
+          );
+        } catch (error) {
+          console.error("Export error:", error);
+          alert("❌ Failed to export calendar. Please try again.");
+        }
       }
     </script>
   </body>
