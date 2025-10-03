@@ -9,6 +9,7 @@ import {
   getAllSchedules,
   getSchedulesByDate,
   deleteScheduleById,
+  updateScheduleById,
 } from "./db/database.js";
 import Cerebras from "@cerebras/cerebras_cloud_sdk";
 
@@ -90,6 +91,36 @@ app.post("/save-schedule", async (req, res) => {
   }
 });
 
+// Update a schedule by id
+app.put("/schedules/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { plan } = req.body;
+
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ success: false, error: "Invalid id" });
+    }
+
+    if (!plan) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Plan is required" });
+    }
+
+    const planJson = typeof plan === "string" ? plan : JSON.stringify(plan);
+    const changes = updateScheduleById(id, planJson);
+
+    console.log(`Updated schedule ${id}: ${changes} row(s) affected`);
+    res.json({ success: true, updated: changes });
+  } catch (error) {
+    console.error("Error updating schedule:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to update schedule.",
+    });
+  }
+});
+
 // Delete a schedule by id
 app.delete("/schedules/:id", async (req, res) => {
   try {
@@ -118,9 +149,9 @@ app.get("/schedules/today", async (req, res) => {
   const today = `${yyyy}-${mm}-${dd}`;
 
   try {
-    const schedule = getScheduleForDate(today);
-    if (schedule) {
-      res.json({ success: true, schedule: schedule });
+    const result = getScheduleForDate(today);
+    if (result) {
+      res.json({ success: true, scheduleId: result.id, schedule: result.plan });
     } else {
       res
         .status(404)

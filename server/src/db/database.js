@@ -94,14 +94,14 @@ const saveScheduleToDb = (date, plan, prompt) => {
   return info.lastInsertRowid;
 };
 
-// Function to get a schedule by date (latest by id)
+// Function to get a schedule by date (latest by id) - returns {id, plan}
 const getScheduleForDate = (date) => {
   const row = db
     .prepare(
-      "SELECT plan FROM schedules WHERE date = ? ORDER BY id DESC LIMIT 1"
+      "SELECT id, plan FROM schedules WHERE date = ? ORDER BY id DESC LIMIT 1"
     )
     .get(date);
-  return row ? safeParsePlan(row.plan) : null; // Parse the JSON string back to an object
+  return row ? { id: row.id, plan: safeParsePlan(row.plan) } : null;
 };
 
 const getAllSchedules = () => {
@@ -154,6 +154,12 @@ const deleteScheduleById = (id) => {
   return info.changes;
 };
 
+const updateScheduleById = (id, plan) => {
+  const stmt = db.prepare("UPDATE schedules SET plan = ? WHERE id = ?");
+  const info = stmt.run(plan, id);
+  return info.changes;
+};
+
 export {
   initDb,
   saveScheduleToDb,
@@ -161,4 +167,5 @@ export {
   getAllSchedules,
   getSchedulesByDate,
   deleteScheduleById,
+  updateScheduleById,
 };

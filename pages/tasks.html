@@ -49,6 +49,13 @@
               placeholder="Search tasks..."
               oninput="searchTasks()"
             />
+            <button
+              class="filter-btn"
+              onclick="loadTasks()"
+              title="Refresh from database"
+            >
+              🔄 Refresh
+            </button>
           </div>
         </div>
 
@@ -93,25 +100,53 @@
       let completedTasks = new Set();
       let currentFilter = "all";
       let editingIndex = -1;
+      let currentScheduleId = null; // Track the current schedule ID for updates
 
       async function loadTasks() {
         try {
-          // Fetch from backend
-          const response = await fetch("/schedules/today");
+          // Fetch today's schedule from backend with cache-busting
+          const response = await fetch(`/schedules/today?_=${Date.now()}`);
           if (response.ok) {
             const data = await response.json();
             if (data.success && data.schedule) {
               tasks = data.schedule;
+              currentScheduleId = data.scheduleId; // Store the schedule ID
+              console.log(
+                `✅ Loaded ${tasks.length} tasks from backend (ID: ${currentScheduleId})`
+              );
+
+              // Load completion status from tasks if stored
+              completedTasks = new Set();
+              tasks.forEach((task, index) => {
+                if (task.completed) {
+                  completedTasks.add(index);
+                }
+              });
+            } else {
+              console.log("No schedule found for today");
+              tasks = [];
+              currentScheduleId = null;
             }
+          } else if (response.status === 404) {
+            console.log("No schedule saved for today yet");
+            tasks = [];
+            currentScheduleId = null;
+          } else {
+            throw new Error(`HTTP ${response.status}`);
           }
         } catch (error) {
-          console.error("Failed to load tasks:", error);
+          console.error("Failed to load tasks from backend:", error);
           // Fallback to localStorage if backend fails
           const saved = localStorage.getItem("todaySchedule");
-          if (saved) tasks = JSON.parse(saved);
+          if (saved) {
+            tasks = JSON.parse(saved);
+            console.log("⚠️ Using localStorage fallback");
+          } else {
+            tasks = [];
+          }
         }
 
-        // Load completed state from localStorage
+        // Load completed state from localStorage (per-session data)
         const savedCompleted = localStorage.getItem("completedTasks");
         if (savedCompleted) {
           completedTasks = new Set(JSON.parse(savedCompleted));
@@ -119,6 +154,36 @@
 
         renderTasks();
         renderStats();
+      }
+
+      // Save updated tasks to backend
+      async function saveTasksToBackend() {
+        if (!currentScheduleId) {
+          console.warn("No schedule ID available, cannot save to backend");
+          return;
+        }
+
+        try {
+          // Update completion status in tasks array
+          const updatedTasks = tasks.map((task, index) => ({
+            ...task,
+            completed: completedTasks.has(index),
+          }));
+
+          const response = await fetch(`/schedules/${currentScheduleId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plan: updatedTasks }),
+          });
+
+          if (response.ok) {
+            console.log("✅ Tasks saved to backend");
+          } else {
+            throw new Error(`HTTP ${response.status}`);
+          }
+        } catch (error) {
+          console.error("Failed to save tasks to backend:", error);
+        }
       }
 
       function renderStats() {
@@ -225,7 +290,7 @@
           .join("");
       }
 
-      function toggleTask(index) {
+      async function toggleTask(index) {
         if (completedTasks.has(index)) {
           completedTasks.delete(index);
         } else {
@@ -237,6 +302,9 @@
         );
         renderTasks();
         renderStats();
+
+        // Save to backend
+        await saveTasksToBackend();
       }
 
       function filterTasks(filter) {
@@ -269,23 +337,30 @@
         editingIndex = -1;
       }
 
-      function saveTask() {
+      async function saveTask() {
         if (editingIndex >= 0) {
+          const wasCompleted = tasks[editingIndex].completed;
           tasks[editingIndex] = {
             task: document.getElementById("editTaskName").value,
             time: document.getElementById("editTaskTime").value,
             duration:
               document.getElementById("editTaskDuration").value + " min",
+            durationMinutes:
+              parseInt(document.getElementById("editTaskDuration").value) || 60,
             priority: document.getElementById("editTaskPriority").value,
+            completed: wasCompleted || false, // Preserve completion status
           };
           localStorage.setItem("todaySchedule", JSON.stringify(tasks));
           closeEditModal();
           renderTasks();
           renderStats();
+
+          // Save to backend
+          await saveTasksToBackend();
         }
       }
 
-      function deleteTask(index) {
+      async function deleteTask(index) {
         if (confirm("Are you sure you want to delete this task?")) {
           tasks.splice(index, 1);
           completedTasks.delete(index);
@@ -303,6 +378,9 @@
           );
           renderTasks();
           renderStats();
+
+          // Save to backend
+          await saveTasksToBackend();
         }
       }
 

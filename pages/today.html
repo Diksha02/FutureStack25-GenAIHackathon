@@ -28,6 +28,7 @@
     <script>
       let schedule = [];
       let completedTasks = new Set();
+      let currentScheduleId = null; // Track schedule ID for updates
 
       async function loadSchedule() {
         try {
@@ -36,11 +37,22 @@
             const data = await response.json();
             if (data.success && data.schedule) {
               schedule = data.schedule;
+              currentScheduleId = data.scheduleId; // Store schedule ID
+
+              // Load completion status from tasks if stored
+              completedTasks = new Set();
+              schedule.forEach((task, index) => {
+                if (task.completed) {
+                  completedTasks.add(index);
+                }
+              });
             } else {
               schedule = []; // No schedule found or an empty schedule
+              currentScheduleId = null;
             }
           } else if (response.status === 404) {
             schedule = []; // Explicitly handle 404 (no schedule for today)
+            currentScheduleId = null;
           } else {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
@@ -48,10 +60,12 @@
           console.error("Error fetching today's schedule:", error);
           alert("Failed to load today's schedule. Please try again later.");
           schedule = [];
+          currentScheduleId = null;
         }
 
+        // Fallback to localStorage for completion status if not in tasks
         const savedCompleted = localStorage.getItem("completedTasks");
-        if (savedCompleted) {
+        if (savedCompleted && completedTasks.size === 0) {
           completedTasks = new Set(JSON.parse(savedCompleted));
         }
         renderDashboard();
@@ -127,7 +141,36 @@
         };
       }
 
-      function toggleTask(index) {
+      // Save updated schedule to backend
+      async function saveScheduleToBackend() {
+        if (!currentScheduleId) {
+          console.warn("No schedule ID available");
+          return;
+        }
+
+        try {
+          const updatedSchedule = schedule.map((task, index) => ({
+            ...task,
+            completed: completedTasks.has(index),
+          }));
+
+          const response = await fetch(`/schedules/${currentScheduleId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plan: updatedSchedule }),
+          });
+
+          if (response.ok) {
+            console.log("✅ Schedule saved to backend");
+          } else {
+            throw new Error(`HTTP ${response.status}`);
+          }
+        } catch (error) {
+          console.error("Failed to save schedule:", error);
+        }
+      }
+
+      async function toggleTask(index) {
         if (completedTasks.has(index)) {
           completedTasks.delete(index);
         } else {
@@ -138,6 +181,9 @@
           JSON.stringify([...completedTasks])
         );
         renderDashboard();
+
+        // Save to backend
+        await saveScheduleToBackend();
       }
 
       function renderDashboard() {
