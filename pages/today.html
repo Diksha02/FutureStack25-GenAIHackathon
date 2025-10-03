@@ -284,18 +284,13 @@
                 }
               })();
               const promptText = s.prompt ? s.prompt : preview;
+              const encodedPlan = encodeURIComponent(JSON.stringify(s.plan));
               return `
-                <div class="today-schedule-item" title="${
-                  s.date
-                } • ${promptText}" onclick="setActiveSchedule('${encodeURIComponent(
-                JSON.stringify(s.plan)
-              )}')">
+                <div class="today-schedule-item" title="${s.date} • ${promptText}" data-plan="${encodedPlan}" onclick="setActiveSchedule(this.getAttribute('data-plan'))">
                   <span class="dot"></span>
                   <span class="line-clamp">${s.date} • ${promptText}</span>
                   <span class="save-time">${savedTime}</span>
-                  <button class="btn-white" onclick="deleteSchedule(${
-                    s.id
-                  }); event.stopPropagation();">Delete</button>
+                  <button class="btn-white" onclick="event.stopPropagation(); deleteSchedule(${s.id});">Delete</button>
                 </div>
               `;
             })
@@ -374,15 +369,13 @@
                   return "";
                 }
               })();
-              const encoded = encodeURIComponent(
-                JSON.stringify(s.plan)
-              ).replace(/'/g, "&#39;");
+              const encodedPlan = encodeURIComponent(JSON.stringify(s.plan));
               return `
-              <div class="today-schedule-item" onclick="setActiveSchedule('${encoded}')" title="${promptText}">
+              <div class="today-schedule-item" data-plan="${encodedPlan}" onclick="setActiveSchedule(this.getAttribute('data-plan'))" title="${promptText}">
                 <span class="dot"></span>
                 <span class="line-clamp">${promptText}</span>
                 <span class="save-time">${savedTime}</span>
-                <button class="btn-white" onclick="deleteSchedule(${s.id}); event.stopPropagation();">Delete</button>
+                <button class="btn-white" onclick="event.stopPropagation(); deleteSchedule(${s.id});">Delete</button>
               </div>
             `;
             })
@@ -396,19 +389,24 @@
       // Switch active schedule for today and re-render
       function setActiveSchedule(planArg) {
         try {
+          console.log("setActiveSchedule called with:", planArg);
           let nextSchedule = planArg;
           if (typeof planArg === "string") {
             // Decode from encodeURIComponent(JSON.stringify(...))
             const decoded = decodeURIComponent(planArg);
+            console.log("Decoded:", decoded);
             nextSchedule = JSON.parse(decoded);
           }
+          console.log("Parsed schedule:", nextSchedule);
           schedule = Array.isArray(nextSchedule) ? nextSchedule : [];
+          console.log("New schedule set:", schedule);
           // reset completed state when switching
           completedTasks = new Set();
           localStorage.removeItem("completedTasks");
           renderDashboard();
         } catch (e) {
-          alert("Failed to switch schedule");
+          console.error("Error in setActiveSchedule:", e);
+          alert("Failed to switch schedule: " + e.message);
         }
       }
 

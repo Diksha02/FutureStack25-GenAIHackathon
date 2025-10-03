@@ -205,12 +205,13 @@ nav a.active {
 }
 
 .current-task {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #5568d3 0%, #6b3fa0 100%);
   color: white;
   padding: 30px;
   border-radius: 16px;
   margin-bottom: 30px;
   grid-column: 1 / -1;
+  box-shadow: 0 8px 24px rgba(91, 104, 211, 0.35);
 }
 
 .current-task h2 {
