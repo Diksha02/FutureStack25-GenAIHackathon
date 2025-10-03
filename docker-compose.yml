@@ -1,0 +1,32 @@
+services:
+  taskpilot:
+    build: .
+    container_name: taskpilot-app
+    ports:
+      - "3000:5050"
+    environment:
+      - NODE_ENV=production
+      - PORT=5050
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
+    volumes:
+      # Persist database
+      - taskpilot-db:/app/server/src/db
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:5050/",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  taskpilot-db:
+    driver: local

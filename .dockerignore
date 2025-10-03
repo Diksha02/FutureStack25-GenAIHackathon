@@ -1,0 +1,13 @@
+node_modules
+server/node_modules/
+npm-debug.log
+.env
+.git
+.gitignore
+server/src/db/*.db
+server/src/db/*.db-shm
+server/src/db/*.db-wal
+.vscode
+.idea
+*.log
+

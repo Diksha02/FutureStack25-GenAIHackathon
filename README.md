@@ -46,8 +46,12 @@ The result: you don’t just plan—you leave with a **full, validated daily roa
 ## 📂 Repository Structure
 
 ```
-.├── .git/
+.
+├── .git/
 ├── .gitignore
+├── .dockerignore
+├── Dockerfile
+├── docker-compose.yml
 ├── pages/
 │   ├── index.html
 │   ├── today.html
@@ -68,9 +72,43 @@ The result: you don’t just plan—you leave with a **full, validated daily roa
 
 ---
 
-## ⚙️ Getting Started (Server)
+## ⚙️ Getting Started
 
-To run the backend server:
+### Option 1: Run with Docker (Recommended)
+
+The easiest way to run TaskPilot is using Docker:
+
+1.  **Prerequisites:**
+    - Install [Docker](https://docs.docker.com/get-docker/)
+    - Install [Docker Compose](https://docs.docker.com/compose/install/)
+
+2.  **Set up environment variables:**
+    Create a `.env` file in the **root directory** and add your Cerebras API key:
+    ```bash
+    CEREBRAS_API_KEY=your_cerebras_api_key_here
+    ```
+
+3.  **Build and run with Docker Compose:**
+    ```bash
+    docker-compose up -d
+    ```
+
+4.  **Access the application:**
+    Open your browser and navigate to `http://localhost:5050`
+
+5.  **View logs (optional):**
+    ```bash
+    docker-compose logs -f
+    ```
+
+6.  **Stop the application:**
+    ```bash
+    docker-compose down
+    ```
+
+### Option 2: Run Locally (Development)
+
+To run the backend server directly on your machine:
 
 1.  **Navigate to the server directory:**
     ```bash

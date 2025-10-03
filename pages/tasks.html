@@ -94,15 +94,29 @@
       let currentFilter = "all";
       let editingIndex = -1;
 
-      function loadTasks() {
-        const saved = localStorage.getItem("todaySchedule");
-        if (saved) {
-          tasks = JSON.parse(saved);
+      async function loadTasks() {
+        try {
+          // Fetch from backend
+          const response = await fetch("/schedules/today");
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.schedule) {
+              tasks = data.schedule;
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load tasks:", error);
+          // Fallback to localStorage if backend fails
+          const saved = localStorage.getItem("todaySchedule");
+          if (saved) tasks = JSON.parse(saved);
         }
+
+        // Load completed state from localStorage
         const savedCompleted = localStorage.getItem("completedTasks");
         if (savedCompleted) {
           completedTasks = new Set(JSON.parse(savedCompleted));
         }
+
         renderTasks();
         renderStats();
       }
