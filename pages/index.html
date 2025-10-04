@@ -40,6 +40,26 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
               <span>Clear</span>
             </button>
           </div>
+
+          <!-- Cerebras Performance Badge -->
+          <div
+            id="perfBadge"
+            style="
+              display: none;
+              margin-top: 15px;
+              padding: 12px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              border-radius: 8px;
+              color: white;
+              font-size: 13px;
+              text-align: center;
+            "
+          >
+            <div style="font-weight: 600; margin-bottom: 5px">
+              ⚡ Powered by Cerebras
+            </div>
+            <div id="perfMetrics" style="opacity: 0.9"></div>
+          </div>
         </div>
 
         <div class="card">
@@ -234,6 +254,22 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
                   ).textContent = `${usedModel.speed} | ${usedModel.quality}`;
                 }
               }
+
+              // Show Cerebras performance badge
+              const perfBadge = document.getElementById("perfBadge");
+              const perfMetrics = document.getElementById("perfMetrics");
+              const latency = data.metadata.latency;
+              const tokensPerSec = Math.round(
+                (data.metadata.tokensUsed?.total_tokens || 800) /
+                  (latency / 1000)
+              );
+
+              perfMetrics.innerHTML = `
+                Generated in <strong>${latency}ms</strong> | 
+                ~${tokensPerSec} tokens/sec | 
+                Model: ${data.metadata.model.split("-")[0].toUpperCase()}
+              `;
+              perfBadge.style.display = "block";
             }
 
             // STEP 2: Now generate schedule-aware suggestions
@@ -567,19 +603,38 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
               }
             } else if (timeRange.toLowerCase().includes("onwards")) {
               startTimeStr = timeRange.replace(/onwards/i, "").trim();
+              endTimeStr = "";
               durationMinutes = 1 * 60; // Default to 1 hour for 'onwards' tasks
             } else {
               startTimeStr = timeRange;
+              endTimeStr = "";
               durationMinutes = 60; // Default to 1 hour if no range or 'onwards'
+            }
+
+            // Extract priority from task description
+            let priority = "medium";
+            let cleanTask = task;
+            const priorityMatch = task.match(
+              /\(Priority:\s*(High|Medium|Low)\)/i
+            );
+            if (priorityMatch) {
+              priority = priorityMatch[1].toLowerCase();
+              cleanTask = task
+                .replace(/\(Priority:\s*(High|Medium|Low)\)/i, "")
+                .trim();
             }
 
             structuredSchedule.push({
               time: startTimeStr,
-              task,
+              timeRange: endTimeStr
+                ? `${startTimeStr} - ${endTimeStr}`
+                : startTimeStr, // Store full range
+              endTime: endTimeStr,
+              task: cleanTask,
               duration: `${durationMinutes} min`,
               durationMinutes,
-              priority: "medium",
-            }); // Store parsed duration and default priority
+              priority: priority,
+            });
           }
         });
         return structuredSchedule;
@@ -589,10 +644,27 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
         let tableRows = "";
 
         structuredSchedule.forEach((item) => {
+          // Priority badge styling
+          const priorityColors = {
+            high: "background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;",
+            medium:
+              "background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;",
+            low: "background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;",
+          };
+          const priorityStyle =
+            priorityColors[item.priority] || priorityColors.medium;
+
           tableRows += `
                             <tr>
-                                <td>${item.time}</td>
-                                <td>${item.task}</td>
+                                <td>${
+                                  item.timeRange || item.time
+                                }<br><span style="font-size: 12px; color: #718096;">${
+            item.duration
+          }</span></td>
+                                <td>
+                                  ${item.task}
+                                  <span style="display: inline-block; margin-left: 10px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${priorityStyle}">${item.priority.toUpperCase()}</span>
+                                </td>
                             </tr>
                         `;
         });
@@ -601,8 +673,8 @@ Gym at 7, deep work 9–11, standup at 11:15, groceries after 6, dinner with fri
                 <table class="schedule-table">
                     <thead>
                         <tr>
-                            <th>Time</th>
-                            <th>Task</th>
+                            <th>Time Range</th>
+                            <th>Task & Priority</th>
                         </tr>
                     </thead>
                     <tbody>

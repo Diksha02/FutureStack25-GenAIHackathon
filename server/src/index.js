@@ -456,7 +456,59 @@ app.post("/generate-plan", async (req, res) => {
           },
           {
             role: "user",
-            content: `A user will provide their daily plan in plain human language. Your task is to transform this into a structured, actionable AI plan.\n\nExample User Input:\n"Tomorrow I need to finish the hackathon project, buy groceries, and then go for a run in the evening. Also, a quick meeting with the team at 10 AM."\n\nExample AI Plan Output(follow this syntax ):\n1. **08:00 AM - 09:00 AM**: Review hackathon project progress and outline remaining tasks.\n2. **09:00 AM - 10:00 AM**: Work on hackathon project - implement feature X.\n3. **10:00 AM - 10:30 AM**: Team meeting (virtual).\n4. **10:30 AM - 01:00 PM**: Continue working on hackathon project - debug and refine feature Y.\n5. **01:00 PM - 02:00 PM**: Lunch break.\n6. **02:00 PM - 03:00 PM**: Go grocery shopping.\n7. **03:00 PM - 05:00 PM**: Finalize hackathon project documentation and prepare for demo.\n8. **05:00 PM - 06:00 PM**: Go for an evening run.\n9. **06:00 PM onwards**: Free time / Dinner.\n\nNow, generate an AI plan for the following user input:\nUser Input:\n"${userDailyPlan}"\n\nAI Plan Output:\n`,
+            content: `You are an expert AI scheduling assistant powered by Cerebras. Transform user requests into optimized daily schedules.
+
+**CRITICAL RULES (MUST FOLLOW EXACTLY):**
+1. ALWAYS use time RANGES in format: "HH:MM AM/PM - HH:MM AM/PM" (NOT single times!)
+   ✓ CORRECT: "09:00 AM - 10:00 AM"
+   ✗ WRONG: "09:00 AM"
+2. Include realistic durations (15-120 min per task)
+3. Add buffer time between tasks (5-15 min)
+4. Respect work-life balance (meals, breaks, sleep)
+5. Front-load high-priority/energy tasks (morning)
+6. Each task MUST have BOTH start AND end time
+
+**Example 1:**
+User: "Tomorrow I need to finish the hackathon project, buy groceries, and then go for a run in the evening. Also, a quick meeting with the team at 10 AM."
+
+AI Plan:
+1. **08:00 AM - 09:00 AM**: Review hackathon project progress and outline remaining tasks. (Priority: High)
+2. **09:00 AM - 10:00 AM**: Deep work - Implement core hackathon features. (Priority: High)
+3. **10:00 AM - 10:30 AM**: Team standup meeting. (Priority: High)
+4. **10:30 AM - 12:30 PM**: Continue hackathon development - debugging and testing. (Priority: High)
+5. **12:30 PM - 01:30 PM**: Lunch break + mental reset. (Priority: Medium)
+6. **01:30 PM - 02:30 PM**: Grocery shopping. (Priority: Medium)
+7. **02:30 PM - 04:30 PM**: Finalize hackathon documentation and demo prep. (Priority: High)
+8. **04:30 PM - 05:00 PM**: Buffer time - handle last-minute tasks. (Priority: Low)
+9. **05:00 PM - 06:00 PM**: Evening run (exercise & stress relief). (Priority: Medium)
+10. **06:00 PM - 07:00 PM**: Dinner. (Priority: Medium)
+11. **07:00 PM onwards**: Free time / relaxation.
+
+**Example 2:**
+User: "I have 3 client calls, need to write a report, and want to go to the gym"
+
+AI Plan:
+1. **09:00 AM - 09:30 AM**: Morning review & email triage. (Priority: Medium)
+2. **09:30 AM - 10:30 AM**: Client call #1. (Priority: High)
+3. **10:30 AM - 11:30 AM**: Client call #2. (Priority: High)
+4. **11:30 AM - 12:00 PM**: Break + prep for next call. (Priority: Low)
+5. **12:00 PM - 01:00 PM**: Client call #3. (Priority: High)
+6. **01:00 PM - 02:00 PM**: Lunch break. (Priority: Medium)
+7. **02:00 PM - 04:00 PM**: Deep work - Write report (uninterrupted). (Priority: High)
+8. **04:00 PM - 04:30 PM**: Review & edit report. (Priority: Medium)
+9. **04:30 PM - 05:30 PM**: Gym workout. (Priority: Medium)
+10. **05:30 PM onwards**: Evening routine.
+
+**Now, create an optimized schedule for:**
+User Input: "${userDailyPlan}"
+
+**IMPORTANT REMINDER:**
+- Every line MUST have time ranges (start - end), NOT single times
+- Format: "HH:MM AM/PM - HH:MM AM/PM"
+- Include (Priority: High/Medium/Low) at the end of each task
+
+**AI Plan Output (follow exact format above):**
+`,
           },
         ],
         // Add other parameters as needed, e.g., temperature, max_tokens

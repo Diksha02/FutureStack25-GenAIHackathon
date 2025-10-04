@@ -288,7 +288,7 @@
                     <div class="task-content">
                         <div class="task-title">${task.task}</div>
                         <div class="task-meta">
-                            <span>⏰ ${task.time}</span>
+                            <span>⏰ ${getTimeRange(task)}</span>
                             <span>⏱️ ${task.duration}</span>
                             <span class="priority-badge priority-${
                               task.priority
@@ -373,6 +373,33 @@
         document.getElementById("editModal").classList.remove("active");
         editingIndex = -1;
       }
+
+      // Helper: convert minutes to "HH:MM AM/PM" format
+      const minutesToTimeString = (minutes) => {
+        let hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        const ampm = hours >= 12 ? "PM" : "AM";
+        if (hours > 12) hours -= 12;
+        if (hours === 0) hours = 12;
+        return `${String(hours).padStart(2, "0")}:${String(mins).padStart(
+          2,
+          "0"
+        )} ${ampm}`;
+      };
+
+      // Helper: get time range string for a task
+      const getTimeRange = (task) => {
+        if (task.timeRange) return task.timeRange; // Already has full range
+        if (task.time && task.durationMinutes) {
+          const startMinutes = timeToMinutes(task.time);
+          if (!isNaN(startMinutes)) {
+            const endMinutes = startMinutes + task.durationMinutes;
+            const endTime = minutesToTimeString(endMinutes);
+            return `${task.time} - ${endTime}`;
+          }
+        }
+        return task.time || "";
+      };
 
       // Helper function to convert time string (HH:MM or HH:MM AM/PM) to minutes since midnight
       function timeToMinutes(timeStr) {

@@ -71,22 +71,49 @@
         renderDashboard();
       }
 
+      // Helper: parse "HH:MM AM/PM" into minutes since midnight
+      const parseTimeToMinutes = (timeStr) => {
+        if (!timeStr) return NaN;
+        const parts = timeStr.trim().split(" ");
+        const timeVal = parts[0] || timeStr.trim();
+        const ampm = (parts[1] || "").toUpperCase();
+        let [h, m] = timeVal.split(":").map(Number);
+        if (Number.isNaN(h) || Number.isNaN(m)) return NaN;
+        if (ampm === "PM" && h < 12) h += 12;
+        if (ampm === "AM" && h === 12) h = 0; // midnight edge case
+        return h * 60 + m;
+      };
+
+      // Helper: convert minutes to "HH:MM AM/PM" format
+      const minutesToTimeString = (minutes) => {
+        let hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        const ampm = hours >= 12 ? "PM" : "AM";
+        if (hours > 12) hours -= 12;
+        if (hours === 0) hours = 12;
+        return `${String(hours).padStart(2, "0")}:${String(mins).padStart(
+          2,
+          "0"
+        )} ${ampm}`;
+      };
+
+      // Helper: get time range string for a task
+      const getTimeRange = (task) => {
+        if (task.timeRange) return task.timeRange; // Already has full range
+        if (task.time && task.durationMinutes) {
+          const startMinutes = parseTimeToMinutes(task.time);
+          if (!isNaN(startMinutes)) {
+            const endMinutes = startMinutes + task.durationMinutes;
+            const endTime = minutesToTimeString(endMinutes);
+            return `${task.time} - ${endTime}`;
+          }
+        }
+        return task.time || "";
+      };
+
       function getCurrentTask() {
         const now = new Date();
         const currentTime = now.getHours() * 60 + now.getMinutes();
-
-        // Helper: parse "HH:MM AM/PM" into minutes since midnight
-        const parseTimeToMinutes = (timeStr) => {
-          if (!timeStr) return NaN;
-          const parts = timeStr.trim().split(" ");
-          const timeVal = parts[0] || timeStr.trim();
-          const ampm = (parts[1] || "").toUpperCase();
-          let [h, m] = timeVal.split(":").map(Number);
-          if (Number.isNaN(h) || Number.isNaN(m)) return NaN;
-          if (ampm === "PM" && h < 12) h += 12;
-          if (ampm === "AM" && h === 12) h = 0; // midnight edge case
-          return h * 60 + m;
-        };
 
         let nextUpcomingTask = null; // first task whose start >= current time
 
@@ -219,7 +246,7 @@
                     <div class="task-title">${currentTask.task}</div>
                     <div class="task-info">
                         <div class="task-meta">
-                            <span>${currentTask.time}</span>
+                            <span>${getTimeRange(currentTask)}</span>
                             <span>${currentTask.duration}</span>
                             <span class="priority-badge priority-${
                               currentTask.priority
@@ -248,7 +275,9 @@
                                      onclick="toggleTask(${index})">
                                     ${completedTasks.has(index) ? "✓" : ""}
                                 </div>
-                                <div class="task-time">${task.time}</div>
+                                <div class="task-time">${getTimeRange(
+                                  task
+                                )}</div>
                                 <div class="task-text">${task.task}</div>
                                 <div class="task-duration">${
                                   task.duration
