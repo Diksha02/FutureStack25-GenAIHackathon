@@ -10,4 +10,4 @@ server/src/db/*.db-wal
 .vscode
 .idea
 *.log
-
+.DS_Store
