@@ -210,7 +210,12 @@
 
         content.innerHTML = `
                 <div class="current-task">
-                    <h2>Current Task</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 style="margin: 0;">Current Task</h2>
+                        <button class="btn-white" onclick="window.location.href='tasks.html'" style="padding: 8px 16px; font-size: 14px;">
+                            ✏️ Edit Schedule
+                        </button>
+                    </div>
                     <div class="task-title">${currentTask.task}</div>
                     <div class="task-info">
                         <div class="task-meta">

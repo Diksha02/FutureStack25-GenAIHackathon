@@ -43,6 +43,22 @@
             </button>
           </div>
           <div class="search-box">
+            <button
+              class="btn-primary"
+              onclick="addNewTask()"
+              style="
+                margin-right: 10px;
+                padding: 8px 16px;
+                background: #5568d3;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-weight: 500;
+              "
+            >
+              ➕ Add New Task
+            </button>
             <input
               type="text"
               id="searchInput"
@@ -65,10 +81,10 @@
 
     <div class="modal" id="editModal">
       <div class="modal-content">
-        <h3>✏️ Edit Task</h3>
+        <h3 id="modalTitle">✏️ Edit Task</h3>
         <div class="form-group">
           <label>Task Name</label>
-          <input type="text" id="editTaskName" />
+          <input type="text" id="editTaskName" placeholder="Enter task name" />
         </div>
         <div class="form-group">
           <label>Time</label>
@@ -76,7 +92,7 @@
         </div>
         <div class="form-group">
           <label>Duration (minutes)</label>
-          <input type="number" id="editTaskDuration" />
+          <input type="number" id="editTaskDuration" placeholder="60" min="1" />
         </div>
         <div class="form-group">
           <label>Priority</label>
@@ -151,6 +167,13 @@
         if (savedCompleted) {
           completedTasks = new Set(JSON.parse(savedCompleted));
         }
+
+        // Sort tasks by time (chronologically)
+        tasks.sort((a, b) => {
+          const timeA = timeToMinutes(a.time);
+          const timeB = timeToMinutes(b.time);
+          return timeA - timeB;
+        });
 
         renderTasks();
         renderStats();
@@ -320,8 +343,22 @@
         renderTasks();
       }
 
+      function addNewTask() {
+        editingIndex = -1; // -1 indicates we're adding a new task
+        document.getElementById("modalTitle").textContent = "➕ Add New Task";
+
+        // Clear all fields
+        document.getElementById("editTaskName").value = "";
+        document.getElementById("editTaskTime").value = "";
+        document.getElementById("editTaskDuration").value = "60";
+        document.getElementById("editTaskPriority").value = "medium";
+
+        document.getElementById("editModal").classList.add("active");
+      }
+
       function editTask(index) {
         editingIndex = index;
+        document.getElementById("modalTitle").textContent = "✏️ Edit Task";
         const task = tasks[index];
         document.getElementById("editTaskName").value = task.task;
         document.getElementById("editTaskTime").value = task.time;
@@ -337,27 +374,362 @@
         editingIndex = -1;
       }
 
+      // Helper function to convert time string (HH:MM or HH:MM AM/PM) to minutes since midnight
+      function timeToMinutes(timeStr) {
+        if (!timeStr) return 0;
+
+        // Handle 24-hour format (HH:MM)
+        if (
+          timeStr.includes(":") &&
+          !timeStr.includes("AM") &&
+          !timeStr.includes("PM")
+        ) {
+          const [hours, minutes] = timeStr.split(":").map(Number);
+          return hours * 60 + minutes;
+        }
+
+        // Handle 12-hour format (HH:MM AM/PM)
+        const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+        if (!match) return 0;
+
+        let hours = parseInt(match[1]);
+        const minutes = parseInt(match[2]);
+        const period = match[3]?.toUpperCase();
+
+        if (period === "PM" && hours !== 12) hours += 12;
+        if (period === "AM" && hours === 12) hours = 0;
+
+        return hours * 60 + minutes;
+      }
+
+      // Helper function to convert minutes to HH:MM format
+      function minutesToTime(minutes) {
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${String(hours).padStart(2, "0")}:${String(mins).padStart(
+          2,
+          "0"
+        )}`;
+      }
+
+      // Check if two time ranges overlap
+      function hasTimeConflict(start1, duration1, start2, duration2) {
+        const end1 = start1 + duration1;
+        const end2 = start2 + duration2;
+
+        // Check if ranges overlap
+        return start1 < end2 && end1 > start2;
+      }
+
+      // Get priority weight for sorting (higher = more important)
+      function getPriorityWeight(priority) {
+        const weights = { high: 3, medium: 2, low: 1 };
+        return weights[priority] || 2;
+      }
+
+      // Recursively adjust overlapping tasks with cascading conflict resolution
+      function adjustOverlappingTasks(
+        newTaskTime,
+        newTaskDuration,
+        newTaskPriority,
+        excludeIndex = -1
+      ) {
+        const newTaskStart = timeToMinutes(newTaskTime);
+        const newTaskEnd = newTaskStart + newTaskDuration;
+        const newTaskWeight = getPriorityWeight(newTaskPriority);
+
+        let allAdjustments = [];
+        let hasHigherPriorityConflict = false;
+
+        // Find all conflicting tasks
+        let conflicts = [];
+        tasks.forEach((task, index) => {
+          if (index === excludeIndex) return; // Skip the task being edited
+
+          const taskStart = timeToMinutes(task.time);
+          const taskDuration = task.durationMinutes || 60;
+
+          if (
+            hasTimeConflict(
+              newTaskStart,
+              newTaskDuration,
+              taskStart,
+              taskDuration
+            )
+          ) {
+            const taskWeight = getPriorityWeight(task.priority);
+
+            // Check if conflicting task has higher priority
+            if (taskWeight > newTaskWeight) {
+              hasHigherPriorityConflict = true;
+            }
+
+            conflicts.push({
+              index,
+              task,
+              start: taskStart,
+              duration: taskDuration,
+              priority: task.priority,
+              weight: taskWeight,
+            });
+          }
+        });
+
+        // If there's a higher priority conflict, prevent the operation
+        if (hasHigherPriorityConflict) {
+          return {
+            success: false,
+            reason: "higher_priority_conflict",
+            conflicts,
+          };
+        }
+
+        // Sort conflicts by start time (earliest first)
+        conflicts.sort((a, b) => a.start - b.start);
+
+        // Recursively adjust conflicting tasks
+        let nextAvailableTime = newTaskEnd;
+
+        for (const conflict of conflicts) {
+          // Move conflicting task to next available slot
+          const adjustedStart = nextAvailableTime;
+          const adjustedTime = minutesToTime(adjustedStart);
+
+          allAdjustments.push({
+            index: conflict.index,
+            taskName: conflict.task.task,
+            oldTime: conflict.task.time,
+            newTime: adjustedTime,
+          });
+
+          // Update the task time
+          tasks[conflict.index].time = adjustedTime;
+
+          // Check if this moved task now conflicts with others (cascading)
+          const cascadingResult = checkAndResolveChain(
+            adjustedStart,
+            conflict.duration,
+            conflict.task.priority,
+            conflict.index,
+            nextAvailableTime + conflict.duration
+          );
+
+          if (!cascadingResult.success) {
+            return cascadingResult; // Propagate failure up
+          }
+
+          allAdjustments.push(...cascadingResult.adjustments);
+
+          // Update next available time
+          nextAvailableTime = cascadingResult.nextTime;
+        }
+
+        return { success: true, adjustments: allAdjustments };
+      }
+
+      // Check and resolve cascading conflicts
+      function checkAndResolveChain(
+        movedTaskStart,
+        movedTaskDuration,
+        movedTaskPriority,
+        movedTaskIndex,
+        currentEndTime
+      ) {
+        const movedTaskEnd = movedTaskStart + movedTaskDuration;
+        const movedTaskWeight = getPriorityWeight(movedTaskPriority);
+
+        let adjustments = [];
+        let nextTime = currentEndTime;
+
+        // Find tasks that now conflict with the moved task
+        let newConflicts = [];
+        tasks.forEach((task, index) => {
+          if (index === movedTaskIndex) return; // Skip self
+
+          const taskStart = timeToMinutes(task.time);
+          const taskDuration = task.durationMinutes || 60;
+
+          if (
+            hasTimeConflict(
+              movedTaskStart,
+              movedTaskDuration,
+              taskStart,
+              taskDuration
+            )
+          ) {
+            const taskWeight = getPriorityWeight(task.priority);
+
+            // Can't move higher priority tasks
+            if (taskWeight > movedTaskWeight) {
+              return {
+                success: false,
+                reason: "cascading_higher_priority_conflict",
+                conflicts: [{ task, index }],
+              };
+            }
+
+            newConflicts.push({
+              index,
+              task,
+              start: taskStart,
+              duration: taskDuration,
+              priority: task.priority,
+            });
+          }
+        });
+
+        // Sort by start time
+        newConflicts.sort((a, b) => a.start - b.start);
+
+        // Recursively move each conflicting task
+        for (const conflict of newConflicts) {
+          const adjustedStart = nextTime;
+          const adjustedTime = minutesToTime(adjustedStart);
+
+          adjustments.push({
+            index: conflict.index,
+            taskName: conflict.task.task,
+            oldTime: conflict.task.time,
+            newTime: adjustedTime,
+          });
+
+          tasks[conflict.index].time = adjustedTime;
+          nextTime = adjustedStart + conflict.duration;
+        }
+
+        return { success: true, adjustments, nextTime };
+      }
+
       async function saveTask() {
+        // Validate required fields
+        const taskName = document.getElementById("editTaskName").value.trim();
+        const taskTime = document.getElementById("editTaskTime").value;
+        const taskDuration = document.getElementById("editTaskDuration").value;
+
+        if (!taskName) {
+          alert("Please enter a task name");
+          return;
+        }
+
+        if (!taskTime) {
+          alert("Please select a time");
+          return;
+        }
+
+        if (!taskDuration || parseInt(taskDuration) <= 0) {
+          alert("Please enter a valid duration");
+          return;
+        }
+
+        const newTaskPriority =
+          document.getElementById("editTaskPriority").value;
+
+        const newTask = {
+          task: taskName,
+          time: taskTime,
+          duration: taskDuration + " min",
+          durationMinutes: parseInt(taskDuration),
+          priority: newTaskPriority,
+          completed: false,
+        };
+
+        // Check for time conflicts and adjust overlapping tasks
+        const result = adjustOverlappingTasks(
+          taskTime,
+          parseInt(taskDuration),
+          newTaskPriority,
+          editingIndex // Exclude current task if editing
+        );
+
+        // Handle priority conflicts - BLOCK the operation
+        if (!result.success) {
+          let errorMessage = "";
+
+          if (result.reason === "higher_priority_conflict") {
+            const conflictDetails = result.conflicts
+              .map(
+                (c) =>
+                  `• ${c.task.task} (${c.priority} priority) at ${c.task.time}`
+              )
+              .join("\n");
+
+            errorMessage = `❌ Cannot add/edit task!\n\nThis time slot conflicts with higher priority tasks:\n\n${conflictDetails}\n\nPlease either:\n• Choose a different time\n• Increase this task's priority to High\n• Manually reschedule the conflicting tasks`;
+          } else if (result.reason === "cascading_higher_priority_conflict") {
+            errorMessage = `❌ Cannot resolve conflicts!\n\nMoving conflicting tasks would affect other high-priority tasks.\n\nPlease choose a different time slot or manually adjust your schedule.`;
+          }
+
+          // Show error modal
+          alert(errorMessage);
+          return; // ABORT - don't save the task
+        }
+
+        // Success - apply changes
         if (editingIndex >= 0) {
+          // EDIT MODE: Update existing task
           const wasCompleted = tasks[editingIndex].completed;
           tasks[editingIndex] = {
-            task: document.getElementById("editTaskName").value,
-            time: document.getElementById("editTaskTime").value,
-            duration:
-              document.getElementById("editTaskDuration").value + " min",
-            durationMinutes:
-              parseInt(document.getElementById("editTaskDuration").value) || 60,
-            priority: document.getElementById("editTaskPriority").value,
-            completed: wasCompleted || false, // Preserve completion status
+            ...newTask,
+            completed: wasCompleted, // Preserve completion status
           };
-          localStorage.setItem("todaySchedule", JSON.stringify(tasks));
-          closeEditModal();
-          renderTasks();
-          renderStats();
-
-          // Save to backend
-          await saveTasksToBackend();
+        } else {
+          // ADD MODE: Add new task
+          tasks.push(newTask);
         }
+
+        // Sort tasks by time (chronologically)
+        tasks.sort((a, b) => {
+          const timeA = timeToMinutes(a.time);
+          const timeB = timeToMinutes(b.time);
+          return timeA - timeB;
+        });
+
+        localStorage.setItem("todaySchedule", JSON.stringify(tasks));
+        closeEditModal();
+        renderTasks();
+        renderStats();
+
+        // Save to backend
+        await saveTasksToBackend();
+
+        // Show success message with conflict info
+        const successMsg = document.createElement("div");
+        successMsg.style.cssText =
+          "position: fixed; top: 20px; right: 20px; background: #10b981; color: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 9999; animation: slideIn 0.3s ease; max-width: 400px; font-size: 14px; line-height: 1.5;";
+
+        let message =
+          editingIndex >= 0
+            ? "✓ Task updated successfully"
+            : "✓ Task added successfully";
+
+        if (result.adjustments && result.adjustments.length > 0) {
+          const uniqueTasks = new Set(result.adjustments.map((a) => a.index))
+            .size;
+          message += `\n\n⚠️ ${uniqueTasks} task${
+            uniqueTasks > 1 ? "s" : ""
+          } automatically rescheduled:`;
+
+          // Show first 3 adjustments
+          const displayAdjustments = result.adjustments.slice(0, 3);
+          displayAdjustments.forEach((adj) => {
+            message += `\n• ${adj.taskName}: ${adj.oldTime} → ${adj.newTime}`;
+          });
+
+          if (result.adjustments.length > 3) {
+            message += `\n• ... and ${result.adjustments.length - 3} more`;
+          }
+        }
+
+        successMsg.style.whiteSpace = "pre-line";
+        successMsg.textContent = message;
+        document.body.appendChild(successMsg);
+        setTimeout(
+          () => {
+            successMsg.style.opacity = "0";
+            successMsg.style.transition = "opacity 0.3s";
+            setTimeout(() => document.body.removeChild(successMsg), 300);
+          },
+          result.adjustments && result.adjustments.length > 0 ? 4500 : 2000
+        ); // Show longer if conflicts were resolved
       }
 
       async function deleteTask(index) {
