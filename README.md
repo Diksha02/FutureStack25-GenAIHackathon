@@ -163,7 +163,6 @@ User Input → Cerebras Llama → Structured Schedule → AI Coaching → Calend
 - **Production-Ready**: Error handling, retry logic, persistence
 - **Cost-Effective**: 100x cheaper than alternatives
 
----
 
 ---
 
